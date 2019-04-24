@@ -191,9 +191,8 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
 
     filename = root.xpath('//ns:Page', namespaces=ns)[0]\
         .attrib["imageFilename"]
-    filename = imgpath + "/" + filename
 
-    im = Image.open(filename)
+    im = Image.open(imgpath)
 
     for n, c in enumerate(sorted(coordmap)):
         if type(scale) == dict:
@@ -253,15 +252,17 @@ if __name__ == "__main__":
     """)
     parser.add_argument('IMAGE',type=str,help='Input image to read textlines from.')
     parser.add_argument('PAGEXML',type=str,help='PAGE xml with regions describing the image.')
-    parser.add_argument('-o','--output', type=str, help='Output for the new PAGE xml with segmented lines.\n(optional: will overwrite input PAGE xml on default)')
+    parser.add_argument('-o','--output', type=str, default=None, help='Output for the new PAGE xml with segmented lines.\n(optional: will overwrite input PAGE xml on default)')
     parser.add_argument('-d','--text_direction', type=str, default='horizontal-lr', help='Principal direction of the text.\nValues:'+
             '\n  [Default] horizontal-lr'+
             '\n  horizontal-rl'+
             '\n  vertical-lr'+
             '\n  vertical-rl')
-    parser.add_argument('-o','--output', type=str, help='Output for the new PAGE xml with segmented lines.\n(optional: will overwrite input PAGE xml on default)')
-    parser.add_argument('-s','--scale', type=float, default=None help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
+    parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
                     
     args = parser.parse_args()
 
-    pagexmllineseg(args.PAGEXML, args.IMAGE, text_direction=args.text_direction, scale=args.scale):
+    xml_output, number_lines = pagexmllineseg(args.PAGEXML, args.IMAGE, text_direction=args.text_direction, scale=args.scale)
+
+    with open(args.PAGEXML if args.output is None else args.output,'w+') as output_file:
+        output_file.write(xml_output)
