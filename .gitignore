@@ -1,0 +1,10 @@
+# Vim
+*~
+*.swp
+
+# Python
+__pycache__/
+build/
+*.egg-info/
+dist/
+
