@@ -2,9 +2,14 @@
 *~
 *.swp
 
+# VSCode
+.vscode
+
+
 # Python
 __pycache__/
 build/
 *.egg-info/
 dist/
+
 

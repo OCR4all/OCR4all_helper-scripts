@@ -8,12 +8,11 @@ setup(name='ocr4all_helpers',
       author_email='nico.balbach@informatik.uni-wuerzburg.de',
       packages=find_packages(),
       license='GPL-v3.0',
-      #entry_points={
-      #      'console_scripts': [
-      #            'deda=deda.console.deda:main',
-      #            'deda_eval_edition=deda.console.edition_evaluate:main',
-      #            'deda_image_align_eval=deda.console.image_align_evaluate:main',
-      #      ],
-      #},
+      entry_points={
+            'console_scripts': [
+                  'pagelineseg=ocr4all_helpers.pagelineseg:main',
+                  'pagedir2pagexml=ocr4all_helpers.pagedir2pagexml:main'
+            ],
+      },
       install_requires=open("requirements.txt").read().split(),
       zip_safe=False)

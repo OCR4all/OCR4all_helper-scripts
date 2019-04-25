@@ -213,15 +213,16 @@ def loopfiles(ocrindex, gtindex, xmlfiles, output):
         for xmlfile in xmlfiles:
             pagexmlcombine(ocrindex, gtindex, xmlfile, output)
 
-
-parser = argparse.ArgumentParser("""
-XML output generation tool
-""")
-parser.add_argument('-ocrx','--ocrindex',type=int,default=1,help='Index attribute of the OCR text.')
-parser.add_argument('-gtx','--gtindex',type=int,default=0,help='Index attribute of the ground truth text.')
-parser.add_argument('-o','--output', type=str, help='Output directory')
-parser.add_argument('xmlfiles',nargs='+')
-args = parser.parse_args()
+def main():
+    parser = argparse.ArgumentParser("""
+    XML output generation tool
+    """)
+    parser.add_argument('-ocrx','--ocrindex',type=int,default=1,help='Index attribute of the OCR text.')
+    parser.add_argument('-gtx','--gtindex',type=int,default=0,help='Index attribute of the ground truth text.')
+    parser.add_argument('-o','--output', type=str, help='Output directory')
+    parser.add_argument('xmlfiles',nargs='+')
+    args = parser.parse_args()
+    loopfiles(args.ocrindex, args.gtindex, args.xmlfiles, args.output)
 
 if __name__ == '__main__':
-    loopfiles(args.ocrindex, args.gtindex, args.xmlfiles, args.output)
+    main()

@@ -246,7 +246,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
     return xmlstring, no_lines_segm
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser("""
     Line segmentation with regions read from a PAGE xml file
     """)
@@ -266,3 +266,7 @@ if __name__ == "__main__":
 
     with open(args.PAGEXML if args.output is None else args.output,'w+') as output_file:
         output_file.write(xml_output)
+
+
+if __name__ == "__main__":
+    main()
