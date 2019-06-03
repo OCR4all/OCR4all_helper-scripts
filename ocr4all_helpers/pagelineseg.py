@@ -15,6 +15,10 @@ from kraken.lib.util import pil2array
 from kraken.binarization import is_bitonal
 from kraken.lib.exceptions import KrakenInputException
 
+import multiprocessing
+from multiprocessing.pool import ThreadPool
+import json
+
 import argparse
 
 
@@ -250,23 +254,33 @@ def main():
     parser = argparse.ArgumentParser("""
     Line segmentation with regions read from a PAGE xml file
     """)
-    parser.add_argument('IMAGE',type=str,help='Input image to read textlines from.')
-    parser.add_argument('PAGEXML',type=str,help='PAGE xml with regions describing the image.')
-    parser.add_argument('-o','--output', type=str, default=None, help='Output for the new PAGE xml with segmented lines.\n(optional: will overwrite input PAGE xml on default)')
+    parser.add_argument('DATASET',type=str,help='Path to the input dataset in json format with a list of image path, pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
     parser.add_argument('-d','--text_direction', type=str, default='horizontal-lr', help='Principal direction of the text.\nValues:'+
             '\n  [Default] horizontal-lr'+
             '\n  horizontal-rl'+
             '\n  vertical-lr'+
             '\n  vertical-rl')
     parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
+    parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:1)')
                     
     args = parser.parse_args()
 
-    xml_output, number_lines = pagexmllineseg(args.PAGEXML, args.IMAGE, text_direction=args.text_direction, scale=args.scale)
+    with open(args.DATASET, 'r') as data_file:
+        dataset = json.load(data_file)
 
-    with open(args.PAGEXML if args.output is None else args.output,'w+') as output_file:
-        output_file.write(xml_output)
+    # Parallel processes for the pagexmllineseg
+    def parallel(data):
+        image,pagexml = data[:2]
+        pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
+        xml_output, number_lines = pagexmllineseg(pagexml, image, text_direction=args.text_direction, scale=args.scale)
+        with open(pagexml_out, 'w+') as output_file:
+            output_file.write(xml_output)
+
+    # Pool of all parallel processed pagexmllineseg
+    with ThreadPool(processes=min(args.parallel,len(dataset))) as pool:
+        output = pool.map(parallel,dataset)
+    
 
 if __name__ == "__main__":
     main()
