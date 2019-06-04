@@ -171,6 +171,8 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
     root = etree.parse(xmlfile).getroot()
     ns = {"ns": root.nsmap[None]}
 
+    print("Load textlines from {}".format(xmlfile))
+
     # convert point notation from older pagexml versions
     for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
         cc = []
@@ -196,6 +198,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
     filename = root.xpath('//ns:Page', namespaces=ns)[0]\
         .attrib["imageFilename"]
 
+    print("Segment image {} for textlines".format(xmlfile))
     im = Image.open(imgpath)
 
     for n, c in enumerate(sorted(coordmap)):
@@ -230,6 +233,8 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
         else:
             lines = []
 
+
+        print("Save new textlines into {}".format(pagexml))
         for n, l in enumerate(lines):
             if coordmap[c]["type"] == "drop-capital":
                 coordstrg = coordmap[c]["coordstring"]
