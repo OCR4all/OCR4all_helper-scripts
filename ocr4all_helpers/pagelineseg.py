@@ -21,6 +21,13 @@ import json
 
 import argparse
 
+# Add printing for every thread
+from threading import Lock
+s_print_lock = Lock()
+def s_print(*a,**b):
+    with s_print_lock:
+        print(*a,**b)
+
 
 def cutout(im, coords):
     """
@@ -171,7 +178,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
     root = etree.parse(xmlfile).getroot()
     ns = {"ns": root.nsmap[None]}
 
-    print("Load textlines from {}".format(xmlfile))
+    s_print("Load textlines from {}".format(xmlfile))
 
     # convert point notation from older pagexml versions
     for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
@@ -198,7 +205,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
     filename = root.xpath('//ns:Page', namespaces=ns)[0]\
         .attrib["imageFilename"]
 
-    print("Segment image {} for textlines".format(xmlfile))
+    s_print("Segment image {} for textlines".format(xmlfile))
     im = Image.open(imgpath)
 
     for n, c in enumerate(sorted(coordmap)):
@@ -234,7 +241,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
             lines = []
 
 
-        print("Save new textlines into {}".format(pagexml))
+        s_print("Save new textlines into {}".format(xmlfile))
         for n, l in enumerate(lines):
             if coordmap[c]["type"] == "drop-capital":
                 coordstrg = coordmap[c]["coordstring"]
@@ -253,7 +260,6 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
     no_lines_segm = int(root.xpath("count(//TextLine)"))
     return xmlstring, no_lines_segm
-
 
 def main():
     parser = argparse.ArgumentParser("""
