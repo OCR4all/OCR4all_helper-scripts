@@ -19,6 +19,7 @@ import multiprocessing
 from multiprocessing.pool import ThreadPool
 import json
 
+import math
 import argparse
 
 # Add printing for every thread
@@ -240,21 +241,27 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
         else:
             lines = []
 
-
         s_print("Save new textlines into {}".format(xmlfile))
-        for n, l in enumerate(lines):
-            if coordmap[c]["type"] == "drop-capital":
-                coordstrg = coordmap[c]["coordstring"]
-            else:
-                coords = ((x[1]+offset[0], x[0]+offset[1]) for x in l.polygon)
-                coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
-            textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]',
-                                    namespaces=ns)[0]
+        # Iterpret whole region as textline if no textline are found
+        if not(lines) or len(lines) == 0:
+            coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
+            textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": "{}_l{:03d}".format(
-                                        c, n+1)})
-            coordsxml = etree.SubElement(linexml, "Coords",
-                                         attrib={"points": coordstrg})
+                                       attrib={"id": "{}_l{:03d}".format( c, n+1)})
+            coordsxml = etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
+
+        else:
+            for n, l in enumerate(lines):
+                if coordmap[c]["type"] == "drop-capital":
+                    coordstrg = coordmap[c]["coordstring"]
+                else:
+                    coords = ((x[1]+offset[0], x[0]+offset[1]) for x in l.polygon)
+                    coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
+                textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+                linexml = etree.SubElement(textregion, "TextLine",
+                                           attrib={"id": "{}_l{:03d}".format( c, n+1)})
+                coordsxml = etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
+
     xmlstring = etree.tounicode(root.getroottree()).replace(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2010-03-19",
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
