@@ -15,12 +15,12 @@ from kraken.lib.util import pil2array
 from kraken.binarization import is_bitonal
 from kraken.lib.exceptions import KrakenInputException
 
-import multiprocessing
 from multiprocessing.pool import ThreadPool
 import json
 
-import math
 import argparse
+
+import os
 
 # Add printing for every thread
 from threading import Lock
@@ -52,7 +52,7 @@ class record(object):
         self.__dict__.update(kw)
 
 
-def compute_lines(segmentation, spread, scale):
+def compute_lines(segmentation, spread, scale, tolerance):
     """Given a line segmentation map, computes a list
     of tuples consisting of 2D slices and masked images."""
     lobjects = morph.find_objects(segmentation)
@@ -70,7 +70,7 @@ def compute_lines(segmentation, spread, scale):
         result.bounds = o
         polygon = []
         if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
-            ppoints = draw_polygon(spread[o], i+1)
+            ppoints = draw_polygon(spread[o], i+1, tolerance)
             ppoints = ppoints[1:] if ppoints else []
             polygon = [(o[0].start+p[0], o[1].start+p[1]) for p in ppoints]
         if not polygon:
@@ -82,19 +82,19 @@ def compute_lines(segmentation, spread, scale):
     return lines
 
 
-def draw_polygon(lspread, lineno):
+def draw_polygon(lspread, lineno, tolerance=1):
     """Draws a polygon around area of value lineno in array lspread."""
     lspread = np.pad(lspread, 1, "constant", constant_values=0)
     cont = find_contours(np.where(lspread == lineno, lineno, 2*lineno), lineno)
     if len(cont) == 1 and all(cont[0][0] == cont[0][-1]):
-        polyg = approximate_polygon(cont[0], tolerance=1).astype(int)
+        polyg = approximate_polygon(cont[0], tolerance=tolerance).astype(int)
         return [(p[0]-1, p[1]-1) for p in polyg]
     else:
         return []
 
 
 def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
-            black_colseps=False):
+            black_colseps=False, tolerance=1):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -107,6 +107,7 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
         maxcolseps (int): Maximum number of whitespace column separators
         black_colseps (bool): Whether column separators are assumed to be
                               vertical black lines or not
+        tolerance (float): Tolerance for the polygons wrapping textlines
     Returns:
         {'text_direction': '$dir', 'boxes': [(x1, y1, x2, y2),...]}: A
         dictionary containing the text direction and a list of reading order
@@ -163,7 +164,7 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
     segmentation = llabels*binary
 
-    lines_and_polygons = compute_lines(segmentation, spread, scale)
+    lines_and_polygons = compute_lines(segmentation, spread, scale, tolerance)
     # TODO: rotate_lines for polygons
     order = pageseg.reading_order([l.bounds for l in lines_and_polygons])
     lsort = pageseg.topsort(order)
@@ -175,11 +176,16 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
             'script_detection': False}
 
 
-def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None):
+def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None, tolerance=1):
+    name = os.path.splitext(os.path.split(imgpath)[-1])[0]
+    s_print(""" Start process for '{}'
+                    ├── Image: '{}'
+                    └── Annotations: '{}' """.format(name, imgpath, xmlfile))
+
     root = etree.parse(xmlfile).getroot()
     ns = {"ns": root.nsmap[None]}
 
-    s_print("Load textlines from {}".format(xmlfile))
+    s_print("[{}] Retrieve TextRegions".format(name))
 
     # convert point notation from older pagexml versions
     for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
@@ -206,7 +212,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
     filename = root.xpath('//ns:Page', namespaces=ns)[0]\
         .attrib["imageFilename"]
 
-    s_print("Segment image {} for textlines".format(xmlfile))
+    s_print("[{}] Extract Textlines from TextRegions".format(name))
     im = Image.open(imgpath)
 
     for n, c in enumerate(sorted(coordmap)):
@@ -235,13 +241,12 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
             else:
                 # if line in
                 lines = segment(cropped, text_direction=text_direction,
-                                scale=rscale, maxcolseps=-1)
+                                scale=rscale, maxcolseps=-1, tolerance=tolerance)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
             lines = []
 
-        s_print("Save new textlines into {}".format(xmlfile))
         # Iterpret whole region as textline if no textline are found
         if not(lines) or len(lines) == 0:
             coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
@@ -262,6 +267,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None)
                                            attrib={"id": "{}_l{:03d}".format( c, n+1)})
                 coordsxml = etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
+    s_print("[{}] Generate new PAGE xml with textlines".format(name))
     xmlstring = etree.tounicode(root.getroottree()).replace(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2010-03-19",
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
@@ -280,6 +286,7 @@ def main():
             '\n  vertical-rl')
     parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
     parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:1)')
+    parser.add_argument('-t','--tolerance', type=int, default=1, help='Tolerance for the polygons wrapping textlines (default:1)')
                     
     args = parser.parse_args()
 
@@ -291,9 +298,12 @@ def main():
         image,pagexml = data[:2]
         pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, text_direction=args.text_direction, scale=args.scale)
+        xml_output, number_lines = pagexmllineseg(pagexml, image, text_direction=args.text_direction, scale=args.scale, tolerance=args.tolerance)
         with open(pagexml_out, 'w+') as output_file:
+            s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
+    
+    s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
 
     # Pool of all parallel processed pagexmllineseg
     with ThreadPool(processes=min(args.parallel,len(dataset))) as pool:
