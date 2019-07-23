@@ -178,9 +178,9 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
 
 def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None, tolerance=1):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
-    s_print(""" Start process for '{}'
-                    ├── Image: '{}'
-                    └── Annotations: '{}' """.format(name, imgpath, xmlfile))
+    s_print("""Start process for '{}'
+        |- Image: '{}'
+        |- Annotations: '{}' """.format(name, imgpath, xmlfile))
 
     root = etree.parse(xmlfile).getroot()
     ns = {"ns": root.nsmap[None]}
@@ -286,7 +286,7 @@ def main():
             '\n  vertical-rl')
     parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
     parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:1)')
-    parser.add_argument('-t','--tolerance', type=int, default=1, help='Tolerance for the polygons wrapping textlines (default:1)')
+    parser.add_argument('-t','--tolerance', type=float, default=1, help='Tolerance for the polygons wrapping textlines (default:1)')
                     
     args = parser.parse_args()
 
