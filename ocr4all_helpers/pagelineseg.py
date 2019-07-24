@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 # Line segmentation script for images with PAGE xml.
-# Derived from the `import_from_larex.py` script from the nashi project:
-# https://github.com/andbue/nashi
+# Derived from the `import_from_larex.py` script 
+# of the nashi project by Andreas Büttner:
+#   https://github.com/andbue/nashi 
 
 import numpy as np
 from skimage.measure import find_contours, approximate_polygon
@@ -14,6 +15,8 @@ from kraken.lib import morph, sl
 from kraken.lib.util import pil2array
 from kraken.binarization import is_bitonal
 from kraken.lib.exceptions import KrakenInputException
+from scipy.ndimage import filters,interpolation,morphology,measurements
+
 
 from multiprocessing.pool import ThreadPool
 import json
@@ -92,8 +95,60 @@ def draw_polygon(lspread, lineno, tolerance=1):
     else:
         return []
 
+def adaptive_binarize(image, zoom=0.5, perc=80, range=20, debug=0):
+    '''
+    Flatten it by estimating the local whitelevel
+    zoom for page background estimation, smaller=faster, default: %(default)s
+    percentage for filters, default: %(default)s
+    range for filters, default: %(default)s
+    Derived from ocropy nlbin:
+    https://github.com/tmbdev/ocropy/blob/8f354ad4facc19eb5c2d5099dc47df9343fd3602/ocropus-nlbin
+    (ocropus itself is not imported, since it can't be imported
+        without executing it. Missing if __name__ == "__main__.py")
+    '''
+    m = interpolation.zoom(image,zoom)
+    m = filters.percentile_filter(m,perc,size=(range,2))
+    m = filters.percentile_filter(m,perc,size=(2,range))
+    m = interpolation.zoom(m,1.0/zoom)
+    w,h = np.minimum(np.array(image.shape),np.array(m.shape))
+    flat = np.clip(image[:w,:h]-m[:w,:h]+1,0,1)
+    del m
+    return flat
 
-def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
+def estimate_skew_angle(image,angles):
+    """ 
+    Estimate the angle of a skew of a scanned line.
+    Derived from ocropy nlbin:
+    https://github.com/tmbdev/ocropy/blob/8f354ad4facc19eb5c2d5099dc47df9343fd3602/ocropus-nlbin
+    (ocropus itself is not imported, since it can't be imported
+        without executing it. Missing if __name__ == "__main__.py")
+    """
+    estimates = []
+    for a in angles:
+        v = np.mean(interpolation.rotate(image,a,order=0,mode='constant'),axis=1)
+        v = np.var(v)
+        estimates.append((v,a))
+    _,a = max(estimates)
+    return a
+
+def estimate_skew(flat, maxskew=2, skewsteps=8):
+    ''' 
+    Estimate skew angle of a scanned line and rotate accordingly
+    Derived from ocropy nlbin:
+    https://github.com/tmbdev/ocropy/blob/8f354ad4facc19eb5c2d5099dc47df9343fd3602/ocropus-nlbin
+    (ocropus itself is not imported, since it can't be imported
+        without executing it. Missing if __name__ == "__main__.py")
+    '''
+    d0,d1 = flat.shape
+    est = flat.copy()
+    est = np.amax(est)-est
+    est -= np.amin(est)
+    minskew = int(2*maxskew*skewsteps)
+    angle = estimate_skew_angle(est,np.linspace(-maxskew,maxskew,minskew+1))
+    del est
+    return angle
+
+def segment(im, scale=None, angle=None, maxcolseps=2,
             black_colseps=False, tolerance=1):
     """
     Segments a page into text lines.
@@ -101,15 +156,13 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
     each line in reading order.
     Args:
         im (PIL.Image): A bi-level page of mode '1' or 'L'
-        text_direction (str): Principal direction of the text
-                              (horizontal-lr/rl/vertical-lr/rl)
         scale (float): Scale of the image
         maxcolseps (int): Maximum number of whitespace column separators
         black_colseps (bool): Whether column separators are assumed to be
                               vertical black lines or not
         tolerance (float): Tolerance for the polygons wrapping textlines
     Returns:
-        {'text_direction': '$dir', 'boxes': [(x1, y1, x2, y2),...]}: A
+        {'angle': '$dir', 'boxes': [(x1, y1, x2, y2),...]}: A
         dictionary containing the text direction and a list of reading order
         sorted bounding boxes under the key 'boxes'.
     Raises:
@@ -120,21 +173,6 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
     if im.mode != '1' and not is_bitonal(im):
         raise KrakenInputException('Image is not bi-level')
 
-    # rotate input image for vertical lines
-    if text_direction.startswith('horizontal'):
-        angle = 0
-        offset = (0, 0)
-    elif text_direction == 'vertical-lr':
-        angle = 270
-        offset = (0, im.size[1])
-    elif text_direction == 'vertical-rl':
-        angle = 90
-        offset = (im.size[0], 0)
-    else:
-        raise KrakenInputException('Invalid text direction')
-
-    im = im.rotate(angle, expand=True)
-
     # honestly I've got no idea what's going on here. In theory a simple
     # np.array(im, 'i') should suffice here but for some reason the
     # tostring/fromstring magic in pil2array alters the array in a way that is
@@ -142,6 +180,9 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
     a = pil2array(im)
     binary = np.array(a > 0.5*(np.amin(a) + np.amax(a)), 'i')
     binary = 1 - binary
+
+    angle = angle if angle is not None else estimate_skew(binary)
+    binary = binary.rotate(angle, expand=True)
 
     if not scale:
         scale = pageseg.estimate_scale(binary)
@@ -155,7 +196,7 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
         else:
             colseps = pageseg.compute_white_colseps(binary, scale, maxcolseps)
     except ValueError:
-        return {'text_direction': text_direction, 'boxes':  []}
+        return {'angle': angle, 'boxes':  []}
 
     bottom, top, boxmap = pageseg.compute_gradmaps(binary, scale)
     seeds = pageseg.compute_line_seeds(binary, bottom, top, colseps, scale)
@@ -170,13 +211,13 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
     lsort = pageseg.topsort(order)
     lines = [lines_and_polygons[i].bounds for i in lsort]
     lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
-    return {'text_direction': text_direction,
+    return {'angle': angle,
             'boxes': pageseg.rotate_lines(lines, 360-angle, offset).tolist(),
             'lines': lines_and_polygons,
             'script_detection': False}
 
 
-def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None, maxcolseps=-1, tolerance=1):
+def pagexmllineseg(xmlfile, imgpath, scale=None, tolerance=1):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -209,9 +250,6 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None,
             coordmap[rid]["coords"] += [[int(x[0]), int(x[1])]
                                         for x in coordstrings]
 
-    filename = root.xpath('//ns:Page', namespaces=ns)[0]\
-        .attrib["imageFilename"]
-
     s_print("[{}] Extract Textlines from TextRegions".format(name))
     im = Image.open(imgpath)
 
@@ -240,8 +278,8 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None,
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, text_direction=text_direction,
-                                scale=rscale, maxcolseps=maxcolseps, tolerance=tolerance)
+                lines = segment(cropped, angle=angle,
+                                scale=rscale, maxcolseps=-1, tolerance=tolerance)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
