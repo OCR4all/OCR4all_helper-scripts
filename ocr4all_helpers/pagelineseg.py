@@ -73,7 +73,7 @@ def compute_lines(segmentation, spread, scale, tolerance):
         result.bounds = o
         polygon = []
         if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
-            ppoints = draw_polygon(spread[o], i+1, tolerance)
+            ppoints = draw_polygon(mask, i+1, tolerance)
             ppoints = ppoints[1:] if ppoints else []
             polygon = [(o[0].start+p[0], o[1].start+p[1]) for p in ppoints]
         if not polygon:
@@ -87,15 +87,13 @@ def compute_lines(segmentation, spread, scale, tolerance):
 
 def draw_polygon(lspread, lineno, tolerance=1):
     """Draws a polygon around area of value lineno in array lspread."""
-    lspread = np.pad(lspread, 1, "constant", constant_values=0)
-    line_image = np.where(lspread == lineno, lineno, 2*lineno)
     
-    cont = approximate_smear_polygon(line_image, lineno)
-    if len(cont) == 1 and all(cont[0][0] == cont[0][-1]):
+    cont = approximate_smear_polygon(lspread)
+    if len(cont) != 1:
         polyg = approximate_polygon(cont[0], tolerance=tolerance).astype(int)
         return [(p[0]-1, p[1]-1) for p in polyg]
     else:
-        return []
+        return [(p[0]-1, p[1]-1) for p in cont]
 
 
 def boundary(contour):
@@ -107,52 +105,55 @@ def boundary(contour):
     return [Xmin, Xmax, Ymin, Ymax]
 
 
-def approximate_smear_polygon(line_image, lineno, growth=(1.1, 1.1), maxIterations=5):
-    work_image = np.zeros_like(line_image)
-    work_image[line_image == lineno-1] = 1
+def approximate_smear_polygon(line_mask, growth=(1.1, 1.1), maxIterations=10):
+    work_image = np.copy(line_mask)
 
-    contours = find_contours(work_image, 0.5)
+    contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
 
-    if len(contours) > 0 and np.count_nonzero(work_image == lineno):
+    if len(contours) > 0:
         iteration = 0
         while len(contours) > 1:
-            s_print(">>",len(contours))
             bounds = [boundary(contour) for contour in contours]
             sorted_x = sorted(bounds, key=lambda b: (b[0], b[2]))
             sorted_y = sorted(bounds, key=lambda b: (b[2], b[0]))
             distances_x = sorted(max(c2[0]-c1[1], 0) for c1, c2 in zip(sorted_x, sorted_x[1:]))
             distances_y = sorted(max(c2[2]-c1[3], 0) for c1, c2 in zip(sorted_y, sorted_y[1:]))
 
-            gap_x = math.ceil((distances_x[int(len(distances_x) / 2)] + 1) + (iteration*growth[0]))
-            gap_y = math.ceil((distances_y[int(len(distances_y) / 2)] + 1) + (iteration*growth[1]))
+            gap_x_med = math.ceil((distances_x[int(len(distances_x) / 2)] + 1) + (iteration*growth[0]))
+            gap_y_med = math.ceil((distances_y[int(len(distances_y) / 2)] + 1) + (iteration*growth[1]))
 
-            work_image_x = binary_dilation(work_image, np.ones((gap_x, 1)))
-            work_image_y = binary_dilation(work_image, np.ones((1, gap_y)))
+            # Smear image in x and y direction
+            width, height = work_image.shape
+            gaps_current_x = [float('Inf')]*height
+            for x in range(width):
+                gap_current_y = float('Inf')
+                for y in range(height):
+                    if work_image[x, y]:
+                        # Entered Contour
+                        gap_current_x = gaps_current_x[y]
 
-            work_image[work_image_x > 0] = 1
-            work_image[work_image_y > 0] = 1
+                        if gap_current_y < gap_y_med and gap_current_y > 0:
+                            # Draw over
+                            work_image[x, y-gap_current_y:y] = True 
+                        
+                        if gap_current_x < gap_x_med and gap_current_x > 0:
+                            #Draw over
+                            work_image[x-gap_current_x:x, y] = True 
+
+                        gap_current_y = 0
+                        gaps_current_x[y] = 0
+                    else:
+                        # Entered/Still in Gap
+                        gap_current_y += 1
+                        gaps_current_x[y] += 1
 
             # Find contours of current smear
-            contours = find_contours(work_image, 0.5)
+            contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
             iteration += 1
-            s_print(len(contours))
 
         return contours[0]
-    return None
+    return []
     
-
-
-    
-
-def wrap_polygon(lspread, lineno, tolerance=1):
-    """Wrap a polygon around the connected components included in the line_binary."""
-    lspread = np.pad(lspread, 1, "constant", constant_values=0)
-    cont = find_contours(np.where(lspread == lineno, lineno, 2*lineno), lineno)
-    if len(cont) == 1 and all(cont[0][0] == cont[0][-1]):
-        polyg = approximate_polygon(cont[0], tolerance=tolerance).astype(int)
-        return [(p[0]-1, p[1]-1) for p in polyg]
-    else:
-        return []
 
 def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
             black_colseps=False, tolerance=1):
