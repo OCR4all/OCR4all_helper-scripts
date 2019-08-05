@@ -89,7 +89,7 @@ def draw_polygon(lspread, lineno, tolerance=1):
     """Draws a polygon around area of value lineno in array lspread."""
     
     cont = approximate_smear_polygon(lspread)
-    if len(cont) != 1:
+    if len(cont) == 1:
         polyg = approximate_polygon(cont[0], tolerance=tolerance).astype(int)
         return [(p[0]-1, p[1]-1) for p in polyg]
     else:
@@ -105,7 +105,7 @@ def boundary(contour):
     return [Xmin, Xmax, Ymin, Ymax]
 
 
-def approximate_smear_polygon(line_mask, growth=(1.1, 1.1), maxIterations=10):
+def approximate_smear_polygon(line_mask, growth=(1.1, 10), maxIterations=10):
     work_image = np.copy(line_mask)
 
     contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
@@ -323,7 +323,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None,
                     coordstrg = coordmap[c]["coordstring"]
                 else:
                     coords = ((x[1]+offset[0], x[0]+offset[1]) for x in l.polygon)
-                    coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
+                    coordstrg = " ".join([str(int(x[0]))+","+str(int(x[1])) for x in coords])
                 textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
                 linexml = etree.SubElement(textregion, "TextLine",
                                            attrib={"id": "{}_l{:03d}".format( c, n+1)})
