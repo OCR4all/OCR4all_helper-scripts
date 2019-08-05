@@ -73,7 +73,7 @@ def compute_lines(segmentation, spread, scale, tolerance):
         result.bounds = o
         polygon = []
         if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
-            ppoints = draw_polygon(mask, i+1, tolerance)
+            ppoints = draw_polygon(mask, smear_strength, growth)
             ppoints = ppoints[1:] if ppoints else []
             polygon = [(o[0].start+p[0], o[1].start+p[1]) for p in ppoints]
         if not polygon:
@@ -85,10 +85,10 @@ def compute_lines(segmentation, spread, scale, tolerance):
     return lines
 
 
-def draw_polygon(lspread, lineno, tolerance=1):
+def draw_polygon(lspread, smear_strength, growth):
     """Draws a polygon around area of value lineno in array lspread."""
     
-    cont = approximate_smear_polygon(lspread)
+    cont = approximate_smear_polygon(lspread,smear_strength=smear_strength,growth=growth)
     if len(cont) == 1:
         polyg = approximate_polygon(cont[0], tolerance=tolerance).astype(int)
         return [(p[0]-1, p[1]-1) for p in polyg]
@@ -105,7 +105,7 @@ def boundary(contour):
     return [Xmin, Xmax, Ymin, Ymax]
 
 
-def approximate_smear_polygon(line_mask, growth=(1.1, 10), maxIterations=10):
+def approximate_smear_polygon(line_mask, smear_strength=(1,2), growth=(1.1, 1.1), maxIterations=10):
     work_image = np.copy(line_mask)
 
     contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
@@ -113,14 +113,22 @@ def approximate_smear_polygon(line_mask, growth=(1.1, 10), maxIterations=10):
     if len(contours) > 0:
         iteration = 0
         while len(contours) > 1:
+            # Get bounds sorted by x and y
             bounds = [boundary(contour) for contour in contours]
             sorted_x = sorted(bounds, key=lambda b: (b[0], b[2]))
             sorted_y = sorted(bounds, key=lambda b: (b[2], b[0]))
-            distances_x = sorted(max(c2[0]-c1[1], 0) for c1, c2 in zip(sorted_x, sorted_x[1:]))
-            distances_y = sorted(max(c2[2]-c1[3], 0) for c1, c2 in zip(sorted_y, sorted_y[1:]))
 
-            gap_x_med = math.ceil((distances_x[int(len(distances_x) / 2)] + 1) + (iteration*growth[0]))
-            gap_y_med = math.ceil((distances_y[int(len(distances_y) / 2)] + 1) + (iteration*growth[1]))
+            # Calculate x and y distances between neighboring bounds
+            distances_x = [c2[0]-c1[1] for c1, c2 in zip(sorted_x, sorted_x[1:]) if c2[0]-c1[1] > 0]
+            distances_y = [c2[2]-c1[3] for c1, c2 in zip(sorted_y, sorted_y[1:]) if c2[2]-c1[3] > 0]
+
+            # Calculate x and y median distances (or at least 1)
+            dist_x_median = sorted(distances_x)[int(len(distances_x) / 2)] if len(distances_x) > 0 else 1
+            dist_y_median = sorted(distances_y)[int(len(distances_y) / 2)] if len(distances_y) > 0 else 1
+
+            # Calculate x and y smear distance 
+            smear_distance_x = math.ceil(dist_x_median*smear_strength * (iteration*growth[0]))
+            smear_distance_y = math.ceil(dist_y_median*smear_strength * (iteration*growth[1]))
 
             # Smear image in x and y direction
             width, height = work_image.shape
@@ -132,11 +140,11 @@ def approximate_smear_polygon(line_mask, growth=(1.1, 10), maxIterations=10):
                         # Entered Contour
                         gap_current_x = gaps_current_x[y]
 
-                        if gap_current_y < gap_y_med and gap_current_y > 0:
+                        if gap_current_y < smear_distance_y and gap_current_y > 0:
                             # Draw over
                             work_image[x, y-gap_current_y:y] = True 
                         
-                        if gap_current_x < gap_x_med and gap_current_x > 0:
+                        if gap_current_x < smear_distance_x and gap_current_x > 0:
                             #Draw over
                             work_image[x-gap_current_x:x, y] = True 
 
@@ -155,23 +163,20 @@ def approximate_smear_polygon(line_mask, growth=(1.1, 10), maxIterations=10):
     return []
     
 
-def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
-            black_colseps=False, tolerance=1):
+def segment(im, scale=None, maxcolseps=2, black_colseps=False, tolerance=1):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
     each line in reading order.
     Args:
         im (PIL.Image): A bi-level page of mode '1' or 'L'
-        text_direction (str): Principal direction of the text
-                              (horizontal-lr/rl/vertical-lr/rl)
         scale (float): Scale of the image
         maxcolseps (int): Maximum number of whitespace column separators
         black_colseps (bool): Whether column separators are assumed to be
                               vertical black lines or not
         tolerance (float): Tolerance for the polygons wrapping textlines
     Returns:
-        {'text_direction': '$dir', 'boxes': [(x1, y1, x2, y2),...]}: A
+        {'boxes': [(x1, y1, x2, y2),...]}: A
         dictionary containing the text direction and a list of reading order
         sorted bounding boxes under the key 'boxes'.
     Raises:
@@ -183,17 +188,8 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
         raise KrakenInputException('Image is not bi-level')
 
     # rotate input image for vertical lines
-    if text_direction.startswith('horizontal'):
-        angle = 0
-        offset = (0, 0)
-    elif text_direction == 'vertical-lr':
-        angle = 270
-        offset = (0, im.size[1])
-    elif text_direction == 'vertical-rl':
-        angle = 90
-        offset = (im.size[0], 0)
-    else:
-        raise KrakenInputException('Invalid text direction')
+    angle = 0
+    offset = (0, 0)
 
     im = im.rotate(angle, expand=True)
 
@@ -217,7 +213,7 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
         else:
             colseps = pageseg.compute_white_colseps(binary, scale, maxcolseps)
     except ValueError:
-        return {'text_direction': text_direction, 'boxes':  []}
+        return {'boxes':  []}
 
     bottom, top, boxmap = pageseg.compute_gradmaps(binary, scale)
     seeds = pageseg.compute_line_seeds(binary, bottom, top, colseps, scale)
@@ -232,13 +228,12 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
     lsort = pageseg.topsort(order)
     lines = [lines_and_polygons[i].bounds for i in lsort]
     lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
-    return {'text_direction': text_direction,
-            'boxes': pageseg.rotate_lines(lines, 360-angle, offset).tolist(),
+    return {'boxes': pageseg.rotate_lines(lines, 360-angle, offset).tolist(),
             'lines': lines_and_polygons,
             'script_detection': False}
 
 
-def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None, tolerance=1):
+def pagexmllineseg(xmlfile, imgpath, scale=None, tolerance=1):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -302,8 +297,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None,
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, text_direction=text_direction,
-                                scale=rscale, maxcolseps=-1, tolerance=tolerance)
+                lines = segment(cropped, scale=rscale, maxcolseps=-1, tolerance=tolerance)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
@@ -341,11 +335,6 @@ def main():
     Line segmentation with regions read from a PAGE xml file
     """)
     parser.add_argument('DATASET',type=str,help='Path to the input dataset in json format with a list of image path, pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
-    parser.add_argument('-d','--text_direction', type=str, default='horizontal-lr', help='Principal direction of the text.\nValues:'+
-            '\n  [Default] horizontal-lr'+
-            '\n  horizontal-rl'+
-            '\n  vertical-lr'+
-            '\n  vertical-rl')
     parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
     parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:1)')
     parser.add_argument('-t','--tolerance', type=float, default=1, help='Tolerance for the polygons wrapping textlines (default:1)')
@@ -360,7 +349,7 @@ def main():
         image,pagexml = data[:2]
         pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, text_direction=args.text_direction, scale=args.scale, tolerance=args.tolerance)
+        xml_output, number_lines = pagexmllineseg(pagexml, image, scale=args.scale, tolerance=args.tolerance)
         with open(pagexml_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
