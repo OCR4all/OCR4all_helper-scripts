@@ -54,7 +54,7 @@ class record(object):
         self.__dict__.update(kw)
 
 
-def compute_lines(segmentation, spread, scale, tolerance):
+def compute_lines(segmentation, smear_strength, scale, growth):
     """Given a line segmentation map, computes a list
     of tuples consisting of 2D slices and masked images."""
     lobjects = morph.find_objects(segmentation)
@@ -73,7 +73,7 @@ def compute_lines(segmentation, spread, scale, tolerance):
         result.bounds = o
         polygon = []
         if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
-            ppoints = draw_polygon(mask, smear_strength, growth)
+            ppoints = approximate_smear_polygon(mask, smear_strength, growth)
             ppoints = ppoints[1:] if ppoints else []
             polygon = [(o[0].start+p[0], o[1].start+p[1]) for p in ppoints]
         if not polygon:
@@ -85,50 +85,35 @@ def compute_lines(segmentation, spread, scale, tolerance):
     return lines
 
 
-def draw_polygon(lspread, smear_strength, growth):
-    """Draws a polygon around area of value lineno in array lspread."""
-    
-    cont = approximate_smear_polygon(lspread,smear_strength=smear_strength,growth=growth)
-    if len(cont) == 1:
-        polyg = approximate_polygon(cont[0], tolerance=tolerance).astype(int)
-        return [(p[0]-1, p[1]-1) for p in polyg]
-    else:
-        return [(p[0]-1, p[1]-1) for p in cont]
-
-
 def boundary(contour):
-    Xmin = np.min(contour[:,0])
-    Xmax = np.max(contour[:,0])
-    Ymin = np.min(contour[:,1])
-    Ymax = np.max(contour[:,1])
+    Xmin = np.min(contour[:, 0])
+    Xmax = np.max(contour[:, 0])
+    Ymin = np.min(contour[:, 1])
+    Ymax = np.max(contour[:, 1])
 
     return [Xmin, Xmax, Ymin, Ymax]
 
 
-def approximate_smear_polygon(line_mask, smear_strength=(1,2), growth=(1.1, 1.1), maxIterations=10):
+def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), maxIterations=10):
     work_image = np.copy(line_mask)
 
     contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
 
     if len(contours) > 0:
-        iteration = 0
+        iteration = 1
         while len(contours) > 1:
-            # Get bounds sorted by x and y
+            # Get bounds with dimensions
             bounds = [boundary(contour) for contour in contours]
-            sorted_x = sorted(bounds, key=lambda b: (b[0], b[2]))
-            sorted_y = sorted(bounds, key=lambda b: (b[2], b[0]))
-
-            # Calculate x and y distances between neighboring bounds
-            distances_x = [c2[0]-c1[1] for c1, c2 in zip(sorted_x, sorted_x[1:]) if c2[0]-c1[1] > 0]
-            distances_y = [c2[2]-c1[3] for c1, c2 in zip(sorted_y, sorted_y[1:]) if c2[2]-c1[3] > 0]
+            widths = [b[1]-b[0] for b in bounds]
+            heights = [b[3]-b[2] for b in bounds]
 
             # Calculate x and y median distances (or at least 1)
-            dist_x_median = sorted(distances_x)[int(len(distances_x) / 2)] if len(distances_x) > 0 else 1
-            dist_y_median = sorted(distances_y)[int(len(distances_y) / 2)] if len(distances_y) > 0 else 1
+            width_median = sorted(widths)[int(len(widths) / 2)]
+            height_median = sorted(heights)[int(len(heights) / 2)]
 
             # Calculate x and y smear distance 
-            smear_distance_x = math.ceil(dist_x_median*smear_strength * (iteration*growth[0]))
-            smear_distance_y = math.ceil(dist_y_median*smear_strength * (iteration*growth[1]))
+            smear_distance_x = math.ceil(width_median*smear_strength[0] * (iteration*growth[0]))
+            smear_distance_y = math.ceil(height_median*smear_strength[1] * (iteration*growth[1]))
 
             # Smear image in x and y direction
             width, height = work_image.shape
@@ -154,16 +139,15 @@ def approximate_smear_polygon(line_mask, smear_strength=(1,2), growth=(1.1, 1.1)
                         # Entered/Still in Gap
                         gap_current_y += 1
                         gaps_current_x[y] += 1
-
             # Find contours of current smear
             contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
             iteration += 1
 
-        return contours[0]
+        return [(p[0]-1, p[1]-1) for p in contours[0]]
     return []
     
 
-def segment(im, scale=None, maxcolseps=2, black_colseps=False, tolerance=1):
+def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1)):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -174,7 +158,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, tolerance=1):
         maxcolseps (int): Maximum number of whitespace column separators
         black_colseps (bool): Whether column separators are assumed to be
                               vertical black lines or not
-        tolerance (float): Tolerance for the polygons wrapping textlines
+        growth (float): Tolerance for the polygons wrapping textlines
     Returns:
         {'boxes': [(x1, y1, x2, y2),...]}: A
         dictionary containing the text direction and a list of reading order
@@ -222,7 +206,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, tolerance=1):
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
     segmentation = llabels*binary
 
-    lines_and_polygons = compute_lines(segmentation, spread, scale, tolerance)
+    lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth)
     # TODO: rotate_lines for polygons
     order = pageseg.reading_order([l.bounds for l in lines_and_polygons])
     lsort = pageseg.topsort(order)
@@ -233,7 +217,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, tolerance=1):
             'script_detection': False}
 
 
-def pagexmllineseg(xmlfile, imgpath, scale=None, tolerance=1):
+def pagexmllineseg(xmlfile, imgpath, scale=None, smear_strength=(1, 2), growth=(1.1,1.1)):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -297,7 +281,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, tolerance=1):
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=rscale, maxcolseps=-1, tolerance=tolerance)
+                lines = segment(cropped, scale=rscale, maxcolseps=-1, smear_strength=smear_strength, growth=growth)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
@@ -337,7 +321,10 @@ def main():
     parser.add_argument('DATASET',type=str,help='Path to the input dataset in json format with a list of image path, pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
     parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
     parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:1)')
-    parser.add_argument('-t','--tolerance', type=float, default=1, help='Tolerance for the polygons wrapping textlines (default:1)')
+    parser.add_argument('-x','--smearX', type=float, default=2, help='Smearing strength in X direction for the algorithm calculating the textline polygon wrapping all contents. (default:2)')
+    parser.add_argument('-y','--smearY', type=float, default=1, help='Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all contents. (default:1)')
+    parser.add_argument('--growthX', type=float, default=1.1, help='Growth in X direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: 1.1)')
+    parser.add_argument('--growthY', type=float, default=1.1, help='Growth in Y direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: 1.1)')
                     
     args = parser.parse_args()
 
@@ -349,7 +336,7 @@ def main():
         image,pagexml = data[:2]
         pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, scale=args.scale, tolerance=args.tolerance)
+        xml_output, number_lines = pagexmllineseg(pagexml, image, scale=args.scale, smear_strength=(args.smearX, args.smearY), growth=(args.growthX,args.growthY))
         with open(pagexml_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
