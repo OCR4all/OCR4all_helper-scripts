@@ -176,7 +176,7 @@ def segment(im, text_direction='horizontal-lr', scale=None, maxcolseps=2,
             'script_detection': False}
 
 
-def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None, tolerance=1):
+def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None, maxcolseps=-1, tolerance=1):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -241,7 +241,7 @@ def pagexmllineseg(xmlfile, imgpath, text_direction='horizontal-lr', scale=None,
             else:
                 # if line in
                 lines = segment(cropped, text_direction=text_direction,
-                                scale=rscale, maxcolseps=-1, tolerance=tolerance)
+                                scale=rscale, maxcolseps=maxcolseps, tolerance=tolerance)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
@@ -287,6 +287,7 @@ def main():
     parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
     parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:1)')
     parser.add_argument('-t','--tolerance', type=float, default=1, help='Tolerance for the polygons wrapping textlines (default:1)')
+    parser.add_argument('--maxcolseps', type=int, default=-1, help='Maximum # whitespace column separators, (default: %(default)s)')
                     
     args = parser.parse_args()
 
@@ -298,7 +299,7 @@ def main():
         image,pagexml = data[:2]
         pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, text_direction=args.text_direction, scale=args.scale, tolerance=args.tolerance)
+        xml_output, number_lines = pagexmllineseg(pagexml, image, text_direction=args.text_direction, maxcolseps=args.maxcolseps, scale=args.scale, tolerance=args.tolerance)
         with open(pagexml_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
