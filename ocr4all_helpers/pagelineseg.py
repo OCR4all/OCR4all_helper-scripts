@@ -217,7 +217,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
             'script_detection': False}
 
 
-def pagexmllineseg(xmlfile, imgpath, scale=None, smear_strength=(1, 2), growth=(1.1,1.1)):
+def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(1, 2), growth=(1.1,1.1)):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -281,7 +281,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, smear_strength=(1, 2), growth=(
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=rscale, maxcolseps=-1, smear_strength=smear_strength, growth=growth)
+                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps, smear_strength=smear_strength, growth=growth)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
@@ -325,6 +325,7 @@ def main():
     parser.add_argument('-y','--smearY', type=float, default=1, help='Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all contents. (default:1)')
     parser.add_argument('--growthX', type=float, default=1.1, help='Growth in X direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: 1.1)')
     parser.add_argument('--growthY', type=float, default=1.1, help='Growth in Y direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: 1.1)')
+    parser.add_argument('--maxcolseps', type=int, default=-1, help='Maximum # whitespace column separators, (default: %(default)s)')
                     
     args = parser.parse_args()
 
@@ -336,7 +337,7 @@ def main():
         image,pagexml = data[:2]
         pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, scale=args.scale, smear_strength=(args.smearX, args.smearY), growth=(args.growthX,args.growthY))
+        xml_output, number_lines = pagexmllineseg(pagexml, image, scale=args.scale, maxcolseps=args.maxcolseps, smear_strength=(args.smearX, args.smearY), growth=(args.growthX,args.growthY))
         with open(pagexml_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
