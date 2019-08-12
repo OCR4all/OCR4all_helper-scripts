@@ -13,9 +13,7 @@ from PIL import Image, ImageDraw
 
 from kraken import pageseg, binarization
 from kraken.lib import morph, sl
-from kraken.lib.util import pil2array
 from kraken.binarization import is_bitonal
-from kraken.lib.exceptions import KrakenInputException
 
 from multiprocessing.pool import ThreadPool
 import json
@@ -196,12 +194,12 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
         dictionary containing the text direction and a list of reading order
         sorted bounding boxes under the key 'boxes'.
     Raises:
-        KrakenInputException if the input image is not binarized or the text
+        ValueError if the input image is not binarized or the text
         direction is invalid.
     """
 
     if im.mode != '1' and not is_bitonal(im):
-        raise KrakenInputException('Image is not bi-level')
+        raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
     angle = 0
