@@ -5,7 +5,7 @@
 
 import numpy as np
 from skimage.measure import find_contours, approximate_polygon
-from skimage.morphology import binary_dilation
+from skimage.draw import line_aa
 import math
 
 from lxml import etree
@@ -54,7 +54,7 @@ class record(object):
         self.__dict__.update(kw)
 
 
-def compute_lines(segmentation, smear_strength, scale, growth):
+def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
     """Given a line segmentation map, computes a list
     of tuples consisting of 2D slices and masked images."""
     lobjects = morph.find_objects(segmentation)
@@ -73,7 +73,7 @@ def compute_lines(segmentation, smear_strength, scale, growth):
         result.bounds = o
         polygon = []
         if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
-            ppoints = approximate_smear_polygon(mask, smear_strength, growth)
+            ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
             ppoints = ppoints[1:] if ppoints else []
             polygon = [(o[0].start+p[0], o[1].start+p[1]) for p in ppoints]
         if not polygon:
@@ -94,10 +94,10 @@ def boundary(contour):
     return [Xmin, Xmax, Ymin, Ymax]
 
 
-def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), maxIterations=10):
-    work_image = np.copy(line_mask)
+def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), max_iterations=1):
+    work_image = np.pad(np.copy(line_mask), pad_width=1, mode='constant', constant_values=False)
 
-    contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
+    contours = find_contours(work_image, 0.5, fully_connected="low")
 
     if len(contours) > 0:
         iteration = 1
@@ -140,14 +140,46 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
                         gap_current_y += 1
                         gaps_current_x[y] += 1
             # Find contours of current smear
-            contours = find_contours(np.pad(work_image, pad_width=1, mode='constant', constant_values=False), 0.5, fully_connected="low")
+            contours = find_contours(work_image, 0.5, fully_connected="low")
+
+            # Failsave if contours can't be smeared together after x iterations
+            # Draw lines between the extreme points of each contour in order
+            if iteration >= max_iterations and len(contours) > 1:
+                s_print("Start fail save, since precise line generation took too many iterations ({}).".format(iteration))
+                extreme_points = []
+                for contour in contours:
+                    sorted_x = sorted(contour, key=lambda c: c[0])
+                    sorted_y = sorted(contour, key=lambda c: c[1])
+                    extreme_points.append((tuple(sorted_x[0]), tuple(sorted_y[1]), tuple(sorted_x[-1]), tuple(sorted_y[-1])))
+                
+                sorted_extreme = sorted(extreme_points, key=lambda e: e)
+                for c1, c2 in zip(sorted_extreme, sorted_extreme[1:]):
+                    for p1 in c1:
+                        nearest = None
+                        nearest_dist = math.inf
+                        for p2 in c2:
+                            distance = math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+                            if distance < nearest_dist:
+                                nearest = p2
+                                nearest_dist = distance
+                        if nearest:
+                            # Draw line between nearest points
+                            xx, yy, _ = line_aa(int(p1[0]), int(nearest[0]), int(p2[1]), int(nearest[1]))
+                            # Remove border points
+                            line_points = [(x,y) for x,y in zip(xx,yy) if 0 < x < width and 0 < y < height]
+                            xx_filtered, yy_filtered = zip(*line_points) 
+                            # Paint
+                            work_image[xx_filtered, yy_filtered] = True
+                contours = find_contours(work_image, 0.5, fully_connected="low")
+
             iteration += 1
 
-        return [(p[0]-1, p[1]-1) for p in contours[0]]
+        simplified_contours = approximate_polygon(contours[0], 0.1)
+        return [(p[0]-1, p[1]-1) for p in simplified_contours]
     return []
     
 
-def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1)):
+def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1), fail_save_iterations=100):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -177,11 +209,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
 
     im = im.rotate(angle, expand=True)
 
-    # honestly I've got no idea what's going on here. In theory a simple
-    # np.array(im, 'i') should suffice here but for some reason the
-    # tostring/fromstring magic in pil2array alters the array in a way that is
-    # needed for the algorithm to work correctly.
-    a = pil2array(im)
+    a = np.array(im.convert('L')) if im.mode == '1' else np.array(im)
     binary = np.array(a > 0.5*(np.amin(a) + np.amax(a)), 'i')
     binary = 1 - binary
 
@@ -206,7 +234,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
     segmentation = llabels*binary
 
-    lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth)
+    lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth, fail_save_iterations)
     # TODO: rotate_lines for polygons
     order = pageseg.reading_order([l.bounds for l in lines_and_polygons])
     lsort = pageseg.topsort(order)
@@ -217,7 +245,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
             'script_detection': False}
 
 
-def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(1, 2), growth=(1.1,1.1)):
+def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(1, 2), growth=(1.1,1.1), fail_save_iterations=100):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -281,7 +309,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps, smear_strength=smear_strength, growth=growth)
+                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps, smear_strength=smear_strength, growth=growth, fail_save_iterations=fail_save_iterations)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
@@ -320,12 +348,13 @@ def main():
     """)
     parser.add_argument('DATASET',type=str,help='Path to the input dataset in json format with a list of image path, pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
     parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
-    parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:1)')
-    parser.add_argument('-x','--smearX', type=float, default=2, help='Smearing strength in X direction for the algorithm calculating the textline polygon wrapping all contents. (default:2)')
-    parser.add_argument('-y','--smearY', type=float, default=1, help='Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all contents. (default:1)')
-    parser.add_argument('--growthX', type=float, default=1.1, help='Growth in X direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: 1.1)')
-    parser.add_argument('--growthY', type=float, default=1.1, help='Growth in Y direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: 1.1)')
+    parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:%(default)s)')
+    parser.add_argument('-x','--smearX', type=float, default=2, help='Smearing strength in X direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
+    parser.add_argument('-y','--smearY', type=float, default=1, help='Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
+    parser.add_argument('--growthX', type=float, default=1.1, help='Growth in X direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
+    parser.add_argument('--growthY', type=float, default=1.1, help='Growth in Y direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
     parser.add_argument('--maxcolseps', type=int, default=-1, help='Maximum # whitespace column separators, (default: %(default)s)')
+    parser.add_argument('--fail_save', type=int, default=100, help='Fail save to counter infinite loops when combining contours to a precise textlines. Will connect remaining contours with lines. (default: %(default)s)')
                     
     args = parser.parse_args()
 
@@ -337,7 +366,12 @@ def main():
         image,pagexml = data[:2]
         pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, scale=args.scale, maxcolseps=args.maxcolseps, smear_strength=(args.smearX, args.smearY), growth=(args.growthX,args.growthY))
+        xml_output, number_lines = pagexmllineseg(pagexml, image, 
+                                                    scale=args.scale,
+                                                    maxcolseps=args.maxcolseps, 
+                                                    smear_strength=(args.smearX, args.smearY), 
+                                                    growth=(args.growthX,args.growthY),
+                                                    fail_save_iterations=args.fail_save)
         with open(pagexml_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
