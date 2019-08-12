@@ -12,8 +12,7 @@ from lxml import etree
 from PIL import Image, ImageDraw
 
 from kraken import pageseg, binarization
-from kraken.lib import morph, sl
-from kraken.binarization import is_bitonal
+from kraken.lib import morph
 
 from multiprocessing.pool import ThreadPool
 import json
@@ -60,7 +59,7 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
     for i, o in enumerate(lobjects):
         if o is None:
             continue
-        if sl.dim1(o) < 2*scale or sl.dim0(o) < scale:
+        if o[1].stop-o[1].start < 2*scale or o[0].stop-o[0].start < scale:
             continue
         mask = (segmentation[o] == i+1)
         if np.amax(mask) == 0:
@@ -198,7 +197,8 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
         direction is invalid.
     """
 
-    if im.mode != '1' and not is_bitonal(im):
+    colors = im.getcolors(2)
+    if im.mode != '1' and not (colors is not None and len(colors) == 2):
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
@@ -298,7 +298,8 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         cropped = cutout(im, coords)
         offset = (min([x[0] for x in coords]), min([x[1] for x in coords]))
         if cropped is not None:
-            if not binarization.is_bitonal(cropped):
+            colors = cropped.getcolors(2)
+            if not (colors is not None and len(colors) == 2):
                 try:
                     cropped = binarization.nlbin(cropped)
                 except SystemError:
@@ -307,7 +308,9 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps, smear_strength=smear_strength, growth=growth, fail_save_iterations=fail_save_iterations)
+                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps, 
+                                smear_strength=smear_strength, growth=growth,
+                                fail_save_iterations=fail_save_iterations)
 
                 lines = lines["lines"] if "lines" in lines else []
         else:
