@@ -275,6 +275,8 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
             coordstrings = [x.split(",") for x in c.attrib["points"].split()]
             coordmap[rid]["coords"] += [[int(x[0]), int(x[1])]
                                         for x in coordstrings]
+        if 'orientation' in r.attrib:
+            coordmap[rid]["orientation"] = float(r.attrib["orientation"])
 
     filename = root.xpath('//ns:Page', namespaces=ns)[0]\
         .attrib["imageFilename"]
@@ -293,6 +295,11 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         else:
             rscale = scale
         coords = coordmap[c]['coords']
+        orientation = coordmap[c]['orientation']
+        if not orientation:
+            # TODO calculate orientation
+            pass
+
         if len(coords) < 3:
             continue
         cropped = cutout(im, coords)
@@ -320,6 +327,8 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         if not(lines) or len(lines) == 0:
             coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
             textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+            if orientation:
+                textregion.attrib['orientation'] = orientation
             linexml = etree.SubElement(textregion, "TextLine",
                                        attrib={"id": "{}_l{:03d}".format( c, n+1)})
             coordsxml = etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
@@ -332,6 +341,8 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                     coords = ((x[1]+offset[0], x[0]+offset[1]) for x in l.polygon)
                     coordstrg = " ".join([str(int(x[0]))+","+str(int(x[1])) for x in coords])
                 textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+                if orientation:
+                    textregion.attrib['orientation'] = orientation
                 linexml = etree.SubElement(textregion, "TextLine",
                                            attrib={"id": "{}_l{:03d}".format( c, n+1)})
                 coordsxml = etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
