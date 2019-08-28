@@ -82,6 +82,29 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
     return lines
 
 
+# Ported method from ocropy
+def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
+    ''' estimate skew angle and rotate'''
+    d0,d1 = flat.shape
+    o0,o1 = int(bignore*d0),int(bignore*d1) # border ignore
+    flat = np.amax(flat)-flat
+    flat -= np.amin(flat)
+    est = flat[o0:d0-o0,o1:d1-o1]
+    ma = maxskew
+    ms = int(2*maxskew*skewsteps)
+    return estimate_skew_angle(est,np.linspace(-ma,ma,ms+1))
+
+# Ported method from ocropy
+def estimate_skew_angle(image,angles):
+    estimates = []
+    for a in angles:
+        v = np.mean(image.rotate(a,0,'constant'),axis=1)
+        v = np.var(v)
+        estimates.append((v,a))
+    _,a = max(estimates)
+    return a
+
+
 def boundary(contour):
     Xmin = np.min(contour[:, 0])
     Xmax = np.max(contour[:, 0])
@@ -176,7 +199,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1), fail_save_iterations=100):
+def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=100):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -202,10 +225,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
-    angle = 0
-    offset = (0, 0)
-
-    im = im.rotate(angle, expand=True)
+    im = im.rotate(orientation, expand=True)
 
     a = np.array(im.convert('L')) if im.mode == '1' else np.array(im)
     binary = np.array(a > 0.5*(np.amin(a) + np.amax(a)), 'i')
@@ -238,7 +258,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     lsort = pageseg.topsort(order)
     lines = [lines_and_polygons[i].bounds for i in lsort]
     lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
-    return {'boxes': pageseg.rotate_lines(lines, 360-angle, offset).tolist(),
+    return {'boxes': pageseg.rotate_lines(lines, 360, (0,0)).tolist(),
             'lines': lines_and_polygons,
             'script_detection': False}
 
@@ -296,13 +316,13 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
             rscale = scale
         coords = coordmap[c]['coords']
         orientation = coordmap[c]['orientation']
-        if not orientation:
-            # TODO calculate orientation
-            pass
 
         if len(coords) < 3:
             continue
         cropped = cutout(im, coords)
+        if not orientation:
+            orientation = estimate_skew(cropped)
+
         offset = (min([x[0] for x in coords]), min([x[1] for x in coords]))
         if cropped is not None:
             colors = cropped.getcolors(2)
@@ -315,8 +335,9 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps, 
+                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps,
                                 smear_strength=smear_strength, growth=growth,
+                                orientation=orientation,
                                 fail_save_iterations=fail_save_iterations)
 
                 lines = lines["lines"] if "lines" in lines else []
