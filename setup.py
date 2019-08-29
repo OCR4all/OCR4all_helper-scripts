@@ -10,7 +10,7 @@ setup(name='ocr4all_helpers',
       license='GPL-v3.0',
       entry_points={
             'console_scripts': [
-                  'pagelineseg=ocr4all_helpers.pagelineseg:main',
+                  'pagelineseg=ocr4all_helpers.pagelineseg:cli',
                   'pagedir2pagexml=ocr4all_helpers.pagedir2pagexml:main'
             ],
       },

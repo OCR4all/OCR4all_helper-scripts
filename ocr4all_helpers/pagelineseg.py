@@ -1,6 +1,7 @@
-from skimage import draw, transform, measure
+from skimage import io, draw, transform
+from scipy.ndimage import filters, interpolation
+
 import numpy as np
-import math
 import json
 from lxml import etree
 
@@ -8,14 +9,14 @@ import argparse
 from multiprocessing.pool import ThreadPool
 from threading import Lock
 from collections import namedtuple
-from kraken import pageseg, binarization
+from kraken import pageseg
 from kraken.lib import morph
 
 
 # Named tuples
 Region = namedtuple("Region", "coords type lines orientation")
 Rectangle = namedtuple("Rectangle", "left right top bottom")
-
+LineDescriptor = namedtuple("LineDescriptor", "label bounds mask")
 
 # Thread save print
 s_print_lock = Lock()
@@ -38,22 +39,18 @@ def cli():
 
     args = parser.parse_args()
 
-    # Parallel processes for the pagexmllineseg
+    # (Parallel) processes for the line segmentation
     def cli_process(data):
-        image,pagexml = data[:2]
+        image_path, pagexml = data[:2]
+        image = io.imread(image_path, as_gray=True)
         pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
 
         pagexml_tree = etree.parse(pagexml).getroot()
 
         regions = extract_regions(pagexml_tree)
-
-        xml_output, number_lines = pagexmllineseg(pagexml, image, 
-                                                    scale=args.scale,
-                                                    maxcolseps=args.maxcolseps, 
-                                                    smear_strength=(args.smearX, args.smearY), 
-                                                    growth=(args.growthX,args.growthY),
-                                                    fail_save_iterations=args.fail_save)
-        
+        #TODO add more params
+        region_cutouts = {r_id: cutout_region(region, image) for r_id, region in regions.items()}
+        segmented_regions = {r_id: segment_region(region, region_cutouts[r_id][0]) for r_id, region in regions.items()}
 
         xml_output = update_pagexml(pagexml_tree, segmented_regions)
 
@@ -74,19 +71,23 @@ def cli():
 
 ### Segmentation ###
 # Segment an image into text lines
-def segment_region(region, region_cutout, scale, max_colseps, black_colseps):
-    binary = 1 - np.array(region_cutout > 0.5*(np.amin(region_cutout) + np.amax(region_cutout)), 'i')
+def segment_region(region, region_cutout, max_colseps=1, scale=None, black_colseps=False, pad=3, expand=3, noise=8):
+    binary = 1 - (region_cutout > 0.5*(np.amin(region_cutout) + np.amax(region_cutout)))
+
     width, height = binary.shape
 
-    if not region.orientation:
-        region.orientation = estimate_skew(binary)
+    region_orientation = region.orientation
 
-    if region.orientation != 0:
-        binary = transform.rotate(binary, region.orientation,
+    if not region_orientation:
+        region_orientation = estimate_skew(binary)
+
+    if region_orientation != 0:
+        binary = transform.rotate(binary, region_orientation,
                                 resize=True, center=(width/2, height/2))
 
     if not scale:
         scale = pageseg.estimate_scale(binary)
+
 
     binary = pageseg.remove_hlines(binary, scale)
 
@@ -108,41 +109,52 @@ def segment_region(region, region_cutout, scale, max_colseps, black_colseps):
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
     segmentation = llabels*binary
 
-    # Filter lines
+    # Filter and extract line segments from segmentations
     lobjects = morph.find_objects(segmentation)
+    linedescriptors = []
+    for i,o in enumerate(lobjects):
+        if o is None: continue
+        dim0 = o[0].stop-o[0].start
+        dim1 = o[1].stop-o[1].start
+        if dim1 < 2*scale or dim0 < scale: continue
+        mask = (segmentation[o]==i+1)
+        if np.amax(mask) == 0: continue
+        linedescriptors.append(LineDescriptor(i+1, o, mask))
+    
+    # Reading Order?
+    
+    # Extract poligons of line segments
     lines = []
-    for i, o in enumerate(lobjects):
-        if o is None:
-            continue
-        if o[1].stop-o[1].start < 2*scale or o[0].stop-o[0].start < scale:
-            continue
-        mask = (segmentation[o] == i+1)
-        if np.amax(mask) == 0:
-            continue
+    for linedesc in linedescriptors:
+        bounds = linedesc.bound
 
-        polygon = []
-        if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
-            ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
-            ppoints = ppoints[1:] if ppoints else []
-            polygon = [(o[0].start+p[0], o[1].start+p[1]) for p in ppoints]
-        if not polygon:
-            polygon = [(o[0].start, o[1].start), (o[0].stop,  o[1].start),
-                       (o[0].stop,  o[1].stop),  (o[0].start, o[1].stop)]
-        lines.append(polygon)
+        # padding
+        if pad > 0:
+            mask = pad_image(linedesc.mask, pad, cval=0)
+        else:
+            mask = linedesc.mask
 
+        mask = remove_noise(mask, noise)
+        line = extract(mask,
+                    int(bounds[0].start) - pad,
+                    int(bounds[1].start) - pad,
+                    int(bounds[0].stop) + pad,
+                    int(bounds[1].stop) + pad)
+        if expand > 0:
+            mask = filters.maximum_filter(mask, (expand, expand))
+        line_mask = np.where(mask, line, np.amax(line))
+        #TODO calc polys from line
+        #line = … line_mask …
+        #region.lines.append(line)
 
-
-
-compute_lines()
-
-
-
+    #TODO rotate back, offset etc.
+    return Region(region.coords, region.type, lines, region_orientation)
 
 
 # Estimate the skew of an image
 def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
     ''' estimate skew angle '''
-    width, height = flat.size
+    width, height = flat.shape
     border_x, border_y = int(bignore*width), int(bignore*height)
 
     flat = np.amax(flat)-flat
@@ -162,22 +174,84 @@ def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
     _, angle = max(estimates)
     return angle
 
+
 ### Image manipulation ###
-def cutout_region(gray, region):
-    if len(region.coods) > 0:
-        mask = np.zeros(gray.shape(), dtype=bool)
-        xl, yl = zip(region.coords)
-        mask[draw.polygon(xl, yl)] = True
+# Cut a region out of a gray image
+def cutout_region(region, gray):
+    if len(region.coords) > 0:
+        mask = np.zeros(gray.shape, dtype=bool)
+        xl, yl = zip(*region.coords)
+        xp, yp = draw.polygon(xl, yl)
+
+        mask[yp, xp] = True
 
         left = min(xl)
         right = max(xl)
         top = min(yl)
         bottom = max(yl)
-
-        cutout = (gray[mask])[left:right, top:bottom]
-        return (cutout, Rectangle(left, right, top, bottom))
+        
+        cutout = np.ones_like(gray)*255
+        cutout[mask] = gray[mask]
+        return (cutout[top:bottom, left:right], Rectangle(left, right, top, bottom))
     else:
         raise TypeError("Can't cut region from image. Region coords are empty")
+
+
+# TODO replace (ocropy)
+def pad_image(image,d,cval=np.inf):
+    result = np.ones(np.array(image.shape)+2*d)
+    result[:,:] = np.amax(image) if cval==np.inf else cval
+    result[d:-d,d:-d] = image
+    return result
+
+# TODO replace (ocropy)
+def extract(image,y0,x0,y1,x1,mode='nearest',cval=0):
+    h,w = image.shape
+    ch,cw = y1-y0,x1-x0
+    y,x = np.clip(y0,0,max(h-ch,0)),np.clip(x0,0,max(w-cw, 0))
+    sub = image[y:y+ch,x:x+cw]
+    try:
+        r = interpolation.shift(sub,(y-y0,x-x0),mode=mode,cval=cval,order=0)
+        if cw > w or ch > h:
+            pady0, padx0 = max(-y0, 0), max(-x0, 0)
+            r = interpolation.affine_transform(r, np.eye(2), offset=(pady0, padx0), cval=1, output_shape=(ch, cw))
+        return r
+
+    except RuntimeError:
+        # workaround for platform differences between 32bit and 64bit
+        # scipy.ndimage
+        dtype = sub.dtype
+        sub = np.array(sub,dtype='float64')
+        sub = interpolation.shift(sub,(y-y0,x-x0),mode=mode,cval=cval,order=0)
+        sub = np.array(sub,dtype=dtype)
+        return sub
+
+# TODO replace (ocropy)
+def extract_masked(image,linedesc,pad=5,expand=0):
+    """Extract a subimage from the image using the line descriptor.
+    A line descriptor consists of bounds and a mask."""
+    y0,x0,y1,x1 = [int(x) for x in [linedesc.bounds[0].start,linedesc.bounds[1].start, \
+                  linedesc.bounds[0].stop,linedesc.bounds[1].stop]]
+    if pad>0:
+        mask = pad_image(linedesc.mask,pad,cval=0)
+    else:
+        mask = linedesc.mask
+    line = extract(image,y0-pad,x0-pad,y1+pad,x1+pad)
+    if expand>0:
+        mask = filters.maximum_filter(mask,(expand,expand))
+    line = np.where(mask,line,np.amax(line))
+    return line
+
+# TODO replace (ocropy)
+def remove_noise(line,minsize=8):
+    """Remove small pixels from an image."""
+    if minsize==0: return line
+    bin = (line>0.5*amax(line))
+    labels,n = morph.label(bin)
+    sums = measurements.sum(bin,labels,range(n+1))
+    sums = sums[labels]
+    good = minimum(bin,1-(sums>0)*(sums<minsize))
+    return good
 
 
 ### Page XML IO ###
@@ -220,18 +294,22 @@ def update_pagexml(xmltree, regions):
     def coords(points):
         return {"points": " ".join(str(p[0])+","+str(p[1]) for p in points)}
 
-    for n, (r_id, region) in enumerate(regions):
-        textregion = xmltree.xpath('//ns:TextRegion[@id="'+r_id+'"]', namespaces=ns)[0]
+    for n, (r_id, region) in enumerate(regions.items()):
+        textregion = xmltree.xpath('//ns:TextRegion[@id="{}"]'.format(r_id), namespaces=ns)[0]
         if region.orientation:
             textregion.attrib['orientation'] = region.orientation
-        textregion.attrib["Coords"] = coords(region.coords)
+
+        for coords_elem in textregion.xpath("./ns:Coords", namespaces=ns):
+            textregion.remove(coords_elem)
+        etree.SubElement(textregion, "Coords", coords(region.coords))
 
         def l_id(index):
-            l_id = "{}_l{:03d}".format(r_id, index)
+            return "{}_l{:03d}".format(r_id, index)
 
         # TextLines
         if len(region.lines) == 0:
             # Iterpret whole region as textline if no textline are found
+            s_print({"id": l_id(n+1)})
             linexml = etree.SubElement(textregion, "TextLine", {"id": l_id(n+1)})
             etree.SubElement(linexml, "Coords", coords(region.coords))
         else:
