@@ -5,7 +5,7 @@
 
 import numpy as np
 from skimage.measure import find_contours, approximate_polygon
-from skimage.draw import line_aa
+from skimage.draw import line_aa, polygon
 import math
 
 from lxml import etree
@@ -85,11 +85,11 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
 # Ported method from ocropy
 def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
     ''' estimate skew angle and rotate'''
-    d0,d1 = flat.shape
+    d0,d1 = flat.size
     o0,o1 = int(bignore*d0),int(bignore*d1) # border ignore
     flat = np.amax(flat)-flat
     flat -= np.amin(flat)
-    est = flat[o0:d0-o0,o1:d1-o1]
+    est = Image.fromarray(flat[o0:d0-o0,o1:d1-o1])
     ma = maxskew
     ms = int(2*maxskew*skewsteps)
     return estimate_skew_angle(est,np.linspace(-ma,ma,ms+1))
@@ -98,7 +98,8 @@ def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
 def estimate_skew_angle(image,angles):
     estimates = []
     for a in angles:
-        v = np.mean(image.rotate(a,0,'constant'),axis=1)
+        rotated = image.rotate(a,expand=True)
+        v = np.mean(np.array(rotated),axis=1)
         v = np.var(v)
         estimates.append((v,a))
     _,a = max(estimates)
@@ -114,7 +115,7 @@ def boundary(contour):
     return [Xmin, Xmax, Ymin, Ymax]
 
 
-def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), max_iterations=1):
+def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), max_iterations=1000):
     work_image = np.pad(np.copy(line_mask), pad_width=1, mode='constant', constant_values=False)
 
     contours = find_contours(work_image, 0.5, fully_connected="low")
@@ -147,11 +148,11 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
 
                         if gap_current_y < smear_distance_y and gap_current_y > 0:
                             # Draw over
-                            work_image[x, y-gap_current_y:y] = True 
+                            work_image[x, y-gap_current_y:y] = True
                         
                         if gap_current_x < smear_distance_x and gap_current_x > 0:
                             #Draw over
-                            work_image[x-gap_current_x:x, y] = True 
+                            work_image[x-gap_current_x:x, y] = True
 
                         gap_current_y = 0
                         gaps_current_x[y] = 0
@@ -194,12 +195,13 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
 
             iteration += 1
 
+
         simplified_contours = approximate_polygon(contours[0], 0.1)
         return [(p[0]-1, p[1]-1) for p in simplified_contours]
     return []
     
 
-def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=100):
+def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=1000):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -225,9 +227,9 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
-    im = im.rotate(orientation, expand=True)
+    im_rotated = im.rotate(orientation, expand=True, center=(im.width/2,im.height/2))
 
-    a = np.array(im.convert('L')) if im.mode == '1' else np.array(im)
+    a = np.array(im_rotated.convert('L')) if im_rotated.mode == '1' else np.array(im_rotated)
     binary = np.array(a > 0.5*(np.amin(a) + np.amax(a)), 'i')
     binary = 1 - binary
 
@@ -253,6 +255,22 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     segmentation = llabels*binary
 
     lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth, fail_save_iterations)
+
+    # Translate the points of each point back to original
+    deltaX = canvas.width - im.width
+    deltaY = canvas.height - im.height
+    centerX = canvas.width / 2
+    centerY = canvas.height / 2
+    def translate_back(point):
+        transX = point[0] - centerX
+        transY = point[1] - centerY
+        rotatedX = transX * math.cos(-orientation) - transY * math.sin(-orient)
+        rotatedY = transX * math.sin(-orientation) + transY * math.cos(-orient)
+        return (int(x-deltaX/2), int(y-deltaY/2))
+    
+    lines_and_polygons = [[translate_back(p) for p in poly] for poly in lines_and_polygons]
+
+    
     # TODO: rotate_lines for polygons
     order = pageseg.reading_order([l.bounds for l in lines_and_polygons])
     lsort = pageseg.topsort(order)
@@ -315,12 +333,14 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         else:
             rscale = scale
         coords = coordmap[c]['coords']
-        orientation = coordmap[c]['orientation']
-
+        
         if len(coords) < 3:
             continue
         cropped = cutout(im, coords)
-        if not orientation:
+
+        if 'orientation' in coordmap[c]:
+            orientation = coordmap[c]['orientation']
+        else:
             orientation = estimate_skew(cropped)
 
         offset = (min([x[0] for x in coords]), min([x[1] for x in coords]))
@@ -387,7 +407,7 @@ def main():
     parser.add_argument('--growthX', type=float, default=1.1, help='Growth in X direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
     parser.add_argument('--growthY', type=float, default=1.1, help='Growth in Y direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
     parser.add_argument('--maxcolseps', type=int, default=-1, help='Maximum # whitespace column separators, (default: %(default)s)')
-    parser.add_argument('--fail_save', type=int, default=100, help='Fail save to counter infinite loops when combining contours to a precise textlines. Will connect remaining contours with lines. (default: %(default)s)')
+    parser.add_argument('--fail_save', type=int, default=1000, help='Fail save to counter infinite loops when combining contours to a precise textlines. Will connect remaining contours with lines. (default: %(default)s)')
                     
     args = parser.parse_args()
 
