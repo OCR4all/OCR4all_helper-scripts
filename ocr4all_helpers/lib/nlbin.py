@@ -14,7 +14,6 @@ from PIL import Image
 # Estimate skew angle of a scanned line and rotate accordingly
 # Ported method from ocropy
 def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
-    ''' estimate skew angle and rotate'''
     d0, d1 = flat.size
     o0, o1 = int(bignore*d0), int(bignore*d1) # border ignore
     flat = np.amax(flat)-flat
@@ -24,17 +23,23 @@ def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
     ms = int(2*maxskew*skewsteps)
     return estimate_skew_angle(est, np.linspace(-ma, ma, ms+1))
 
+
 # Estimate the angle of a skew of a scanned line.
 # (Ported method from ocropy)
 def estimate_skew_angle(image, angles):
-    estimates = []
-    for a in angles:
-        rotated = image.rotate(a, expand=True)
-        v = np.mean(np.array(rotated), axis=1)
-        v = np.var(v)
-        estimates.append((v, a))
-    _,a = max(estimates)
-    return a
+    try:
+        estimates = []
+        for a in angles:
+            rotated = image.rotate(a, expand=True)
+            v = np.mean(np.array(rotated), axis=1)
+            v = np.var(v)
+            estimates.append((v, a))
+        _,a = max(estimates)
+        return a
+    except IndexError:
+        # Image is empty-ish
+        return 0
+        
 
 def adaptive_binarize(image, zoom=0.5, perc=80, range=20, debug=0):
     '''
