@@ -8,8 +8,7 @@
 # dependencies like matplotlib.
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter, uniform_filter, maximum_filter
-import lib.morph as morph
-import lib.sl as sl
+from ocr4all_helpers.lib import morph, sl
 
 
 # Computes column separators either from vertical black lines or whitespace.
@@ -164,7 +163,6 @@ def compute_line_seeds(binary,bottom,top,colseps,scale,threshold=0.2,vscale=1.0)
             if s1==0 and (y0-y1)<5*scale: seeds[y1:y0,x] = 1
     seeds = maximum_filter(seeds,(1,int(1+scale)))
     seeds = seeds*(1-colseps)
-    DSAVE("lineseeds",[seeds,0.3*tmarked+0.7*bmarked,binary])
     seeds,_ = morph.label(seeds)
     return seeds
 

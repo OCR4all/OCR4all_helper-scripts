@@ -14,7 +14,6 @@ from PIL import Image
 # Estimate skew angle of a scanned line and rotate accordingly
 # Ported method from ocropy
 def estimate_skew(flat, bignore=0.1, maxskew=2, skewsteps=8):
-    ''' estimate skew angle and rotate'''
     d0, d1 = flat.size
     o0, o1 = int(bignore*d0), int(bignore*d1) # border ignore
     flat = np.amax(flat)-flat

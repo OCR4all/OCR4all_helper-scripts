@@ -18,12 +18,7 @@ import math
 
 from lxml import etree
 from PIL import Image
-from imagemanipulation import cutout
-
-import lib.morph as morph
-import lib.sl as sl
-import lib.pseg as pseg
-from lib.nlbin import adaptive_binarize, estimate_skew
+from ocr4all_helpers.lib import imgmanipulate, morph, sl, pseg, nlbin
 
 from multiprocessing.pool import ThreadPool
 import json
@@ -95,7 +90,7 @@ def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
 
 
     def norm_max(a):
-        return a/amax(a)
+        return a/np.amax(a)
 
     bottom = norm_max((grad<0)*(-grad))
     top = norm_max((grad>0)*grad)
@@ -257,17 +252,18 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     def translate_back(point):
         transX = point[0] - centerX
         transY = point[1] - centerY
-        rotatedX = transX * math.cos(-orientation) - transY * math.sin(-orientation)
-        rotatedY = transX * math.sin(-orientation) + transY * math.cos(-orientation)
+        orient_rad = -orientation * (math.pi / 180)
+        rotatedX = transX * math.cos(orient_rad) - transY * math.sin(orient_rad)
+        rotatedY = transX * math.sin(orient_rad) + transY * math.cos(orient_rad)
         return (int(rotatedX-deltaX/2), int(rotatedY-deltaY/2))
 
-    lines_and_polygons = [[translate_back(p) for p in poly] for poly in lines_and_polygons]
+    lines = [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
     # Sort lines for reading order
-    order = pseg.reading_order([l.bounds for l in lines_and_polygons])
-    lsort = pseg.topsort(order)
-    lines = [lines_and_polygons[i].bounds for i in lsort]
-    lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
+    #order = pseg.reading_order([l.bounds for l in lines_and_polygons])
+    #lsort = pseg.topsort(order)
+    #lines = [lines_and_polygons[i].bounds for i in lsort]
+    #lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
     return lines
 
 
@@ -323,19 +319,21 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         
         if len(coords) < 3:
             continue
-        cropped = cutout(im, coords)
+        cropped = imgmanipulate.cutout(im, coords)
 
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
+            s_print(imgpath,"read",orientation)
         else:
-            orientation = estimate_skew(cropped)
+            orientation = -1*nlbin.estimate_skew(cropped)
+            s_print(imgpath,"calc",orientation)
 
         offset = (min([x[0] for x in coords]), min([x[1] for x in coords]))
         if cropped is not None:
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
                 try:
-                    cropped = adaptive_binarize(cropped)
+                    cropped = nlbin.adaptive_binarize(cropped)
                 except SystemError:
                     continue
             if coordmap[c]["type"] == "drop-capital":
@@ -355,7 +353,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
             coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
             textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
             if orientation:
-                textregion.attrib['orientation'] = orientation
+                textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
                                        attrib={"id": "{}_l{:03d}".format(c, n+1)})
             etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
@@ -369,7 +367,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                     coordstrg = " ".join([str(int(x[0]))+","+str(int(x[1])) for x in coords])
                 textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
                 if orientation:
-                    textregion.attrib['orientation'] = orientation
+                    textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
                                            attrib={"id": "{}_l{:03d}".format(c, n+1)})
                 etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
