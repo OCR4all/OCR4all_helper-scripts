@@ -15,3 +15,8 @@ def dim0(s):
 def dim1(s):
     """Dimension of the slice list for dimension 1."""
     return s[1].stop-s[1].start
+
+
+def area(a):
+    """Return the area of the slice list (ignores anything past a[:2]."""
+    return np.prod([max(x.stop-x.start,0) for x in a[:2]])

@@ -13,15 +13,16 @@
 import numpy as np
 from skimage.measure import find_contours, approximate_polygon
 from skimage.draw import line_aa
+from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
 
 from lxml import etree
 from PIL import Image
 from imagemanipulation import cutout
 
-from kraken import pageseg
 import lib.morph as morph
 import lib.sl as sl
+import lib.pseg as pseg
 from lib.nlbin import adaptive_binarize, estimate_skew
 
 from multiprocessing.pool import ThreadPool
@@ -76,6 +77,29 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
         result.mask = mask
         lines.append(result)
     return lines
+
+
+def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
+    # use gradient filtering to find baselines
+    boxmap = pseg.compute_boxmap(binary, scale)
+    cleaned = boxmap*binary
+    if usegauss:
+        # this uses Gaussians
+        grad = gaussian_filter(1.0*cleaned, (vscale*0.3*scale,
+                                            hscale*6*scale),order=(1,0))
+    else:
+        # this uses non-Gaussian oriented filters
+        grad = gaussian_filter(1.0*cleaned, (max(4, vscale*0.3*scale),
+                                            hscale*scale), order=(1, 0))
+        grad = uniform_filter(grad, (vscale,hscale*6*scale))
+
+
+    def norm_max(a):
+        return a/amax(a)
+
+    bottom = norm_max((grad<0)*(-grad))
+    top = norm_max((grad>0)*grad)
+    return bottom, top, boxmap
 
 
 def boundary(contour):
@@ -206,21 +230,17 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     binary = 1 - binary
 
     if not scale:
-        scale = pageseg.estimate_scale(binary)
+        scale = pseg.estimate_scale(binary)
 
-    binary = pageseg.remove_hlines(binary, scale)
+    binary = pseg.remove_hlines(binary, scale)
     # emptyish images will cause exceptions here.
     try:
-        if black_colseps:
-            colseps, binary = pageseg.compute_black_colseps(binary, scale,
-                                                            maxcolseps)
-        else:
-            colseps = pageseg.compute_white_colseps(binary, scale, maxcolseps)
+        colseps, binary = pseg.compute_colseps(binary, scale, maxcolseps, black_colseps)
     except ValueError:
         return []
 
-    bottom, top, boxmap = pageseg.compute_gradmaps(binary, scale)
-    seeds = pageseg.compute_line_seeds(binary, bottom, top, colseps, scale)
+    bottom, top, boxmap = compute_gradmaps(binary, scale)
+    seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale)
     llabels1 = morph.propagate_labels(boxmap, seeds, conflict=0)
     spread = morph.spread_labels(seeds, maxdist=scale)
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
@@ -244,8 +264,8 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     lines_and_polygons = [[translate_back(p) for p in poly] for poly in lines_and_polygons]
 
     # Sort lines for reading order
-    order = pageseg.reading_order([l.bounds for l in lines_and_polygons])
-    lsort = pageseg.topsort(order)
+    order = pseg.reading_order([l.bounds for l in lines_and_polygons])
+    lsort = pseg.topsort(order)
     lines = [lines_and_polygons[i].bounds for i in lsort]
     lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
     return lines
