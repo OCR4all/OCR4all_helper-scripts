@@ -188,7 +188,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             iteration += 1
 
         simplified_contours = approximate_polygon(contours[0], 0.1)
-        return [(p[0]-1, p[1]-1) for p in simplified_contours]
+        return [(p[0], p[1]) for p in simplified_contours]
     return []
     
 
@@ -244,18 +244,20 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth, fail_save_iterations)
 
     # Translate each point back to original
-    deltaX = im_rotated.width - im.width
-    deltaY = im_rotated.height - im.height
+    deltaY = (im_rotated.width - im.width)
+    deltaX = (im_rotated.height - im.height)
     centerX = im_rotated.width / 2
     centerY = im_rotated.height / 2
 
     def translate_back(point):
-        transX = point[0] - centerX
-        transY = point[1] - centerY
+        # rotate point around center
+        transX = point[0]
+        transY = point[1]
         orient_rad = -orientation * (math.pi / 180)
         rotatedX = transX * math.cos(orient_rad) - transY * math.sin(orient_rad)
         rotatedY = transX * math.sin(orient_rad) + transY * math.cos(orient_rad)
-        return (int(rotatedX-deltaX/2), int(rotatedY-deltaY/2))
+        # move point 
+        return (int(rotatedX-deltaX), int(rotatedY-deltaY))
 
     lines = [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
@@ -319,16 +321,13 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         
         if len(coords) < 3:
             continue
-        cropped = imgmanipulate.cutout(im, coords)
+        cropped, [minX, minY, maxX, maxY] = imgmanipulate.cutout(im, coords)
 
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
-            s_print(imgpath,"read",orientation)
         else:
             orientation = -1*nlbin.estimate_skew(cropped)
-            s_print(imgpath,"calc",orientation)
 
-        offset = (min([x[0] for x in coords]), min([x[1] for x in coords]))
         if cropped is not None:
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
@@ -344,9 +343,9 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                                 smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
                                 fail_save_iterations=fail_save_iterations)
-
         else:
             lines = []
+
 
         # Iterpret whole region as textline if no textline are found
         if not(lines) or len(lines) == 0:
@@ -363,7 +362,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                 if coordmap[c]["type"] == "drop-capital":
                     coordstrg = coordmap[c]["coordstring"]
                 else:
-                    coords = ((x[1]+offset[0], x[0]+offset[1]) for x in poly)
+                    coords = ((x[1]+minX-1, x[0]+minY-1) for x in poly)
                     coordstrg = " ".join([str(int(x[0]))+","+str(int(x[1])) for x in coords])
                 textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
                 if orientation:
