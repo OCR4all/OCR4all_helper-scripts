@@ -16,7 +16,8 @@ from skimage.draw import line_aa
 import math
 
 from lxml import etree
-from PIL import Image, ImageDraw
+from PIL import Image
+from imagemanipulation import cutout
 
 from kraken import pageseg
 import lib.morph as morph
@@ -38,31 +39,17 @@ def s_print(*a, **b):
         print(*a, **b)
 
 
-def cutout(im, coords):
-    """
-        Cut out coords from image, crop and return new image.
-    """
-    coords = [tuple(t) for t in coords]
-    if not coords:
-        return None
-    maskim = Image.new('1', im.size, 0)
-    ImageDraw.Draw(maskim).polygon(coords, outline=1, fill=1)
-    new = Image.new(im.mode, im.size, "white")
-    masked = Image.composite(im, new, maskim)
-    cropped = masked.crop([
-            min([x[0] for x in coords]), min([x[1] for x in coords]),
-            max([x[0] for x in coords]), max([x[1] for x in coords])])
-    return cropped
-
-
 class record(object):
     def __init__(self, **kw):
         self.__dict__.update(kw)
 
 
+# Given a line segmentation map, computes a list
+# of tuples consisting of 2D slices and masked images.
+#
+# Implementation derived from ocropy with changes to allow extracting
+# the line coords/polygons
 def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
-    """Given a line segmentation map, computes a list
-    of tuples consisting of 2D slices and masked images."""
     lobjects = morph.find_objects(segmentation)
     lines = []
     for i, o in enumerate(lobjects):
@@ -230,7 +217,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
         else:
             colseps = pageseg.compute_white_colseps(binary, scale, maxcolseps)
     except ValueError:
-        return {'boxes':  []}
+        return []
 
     bottom, top, boxmap = pageseg.compute_gradmaps(binary, scale)
     seeds = pageseg.compute_line_seeds(binary, bottom, top, colseps, scale)
@@ -241,29 +228,27 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
 
     lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth, fail_save_iterations)
 
-    # Translate the points of each point back to original
-    deltaX = canvas.width - im.width
-    deltaY = canvas.height - im.height
-    centerX = canvas.width / 2
-    centerY = canvas.height / 2
+    # Translate each point back to original
+    deltaX = im_rotated.width - im.width
+    deltaY = im_rotated.height - im.height
+    centerX = im_rotated.width / 2
+    centerY = im_rotated.height / 2
+
     def translate_back(point):
         transX = point[0] - centerX
         transY = point[1] - centerY
-        rotatedX = transX * math.cos(-orientation) - transY * math.sin(-orient)
-        rotatedY = transX * math.sin(-orientation) + transY * math.cos(-orient)
-        return (int(x-deltaX/2), int(y-deltaY/2))
-    
+        rotatedX = transX * math.cos(-orientation) - transY * math.sin(-orientation)
+        rotatedY = transX * math.sin(-orientation) + transY * math.cos(-orientation)
+        return (int(rotatedX-deltaX/2), int(rotatedY-deltaY/2))
+
     lines_and_polygons = [[translate_back(p) for p in poly] for poly in lines_and_polygons]
 
-    
-    # TODO: rotate_lines for polygons
+    # Sort lines for reading order
     order = pageseg.reading_order([l.bounds for l in lines_and_polygons])
     lsort = pageseg.topsort(order)
     lines = [lines_and_polygons[i].bounds for i in lsort]
     lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
-    return {'boxes': pageseg.rotate_lines(lines, 360, (0,0)).tolist(),
-            'lines': lines_and_polygons,
-            'script_detection': False}
+    return lines
 
 
 def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(1, 2), growth=(1.1,1.1), fail_save_iterations=100):
@@ -300,9 +285,6 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                                         for x in coordstrings]
         if 'orientation' in r.attrib:
             coordmap[rid]["orientation"] = float(r.attrib["orientation"])
-
-    filename = root.xpath('//ns:Page', namespaces=ns)[0]\
-        .attrib["imageFilename"]
 
     s_print("[{}] Extract Textlines from TextRegions".format(name))
     im = Image.open(imgpath)
@@ -345,7 +327,6 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                                 orientation=orientation,
                                 fail_save_iterations=fail_save_iterations)
 
-                lines = lines["lines"] if "lines" in lines else []
         else:
             lines = []
 
@@ -356,22 +337,22 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
             if orientation:
                 textregion.attrib['orientation'] = orientation
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": "{}_l{:03d}".format( c, n+1)})
-            coordsxml = etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
+                                       attrib={"id": "{}_l{:03d}".format(c, n+1)})
+            etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
         else:
-            for n, l in enumerate(lines):
+            for n, poly in enumerate(lines):
                 if coordmap[c]["type"] == "drop-capital":
                     coordstrg = coordmap[c]["coordstring"]
                 else:
-                    coords = ((x[1]+offset[0], x[0]+offset[1]) for x in l.polygon)
+                    coords = ((x[1]+offset[0], x[0]+offset[1]) for x in poly)
                     coordstrg = " ".join([str(int(x[0]))+","+str(int(x[1])) for x in coords])
                 textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
                 if orientation:
                     textregion.attrib['orientation'] = orientation
                 linexml = etree.SubElement(textregion, "TextLine",
-                                           attrib={"id": "{}_l{:03d}".format( c, n+1)})
-                coordsxml = etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
+                                           attrib={"id": "{}_l{:03d}".format(c, n+1)})
+                etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
     s_print("[{}] Generate new PAGE xml with textlines".format(name))
     xmlstring = etree.tounicode(root.getroottree()).replace(
@@ -379,6 +360,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
     no_lines_segm = int(root.xpath("count(//TextLine)"))
     return xmlstring, no_lines_segm
+
 
 def main():
     parser = argparse.ArgumentParser("""
@@ -417,8 +399,8 @@ def main():
     s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
 
     # Pool of all parallel processed pagexmllineseg
-    with ThreadPool(processes=min(args.parallel,len(dataset))) as pool:
-        output = pool.map(parallel,dataset)
+    with ThreadPool(processes=min(args.parallel, len(dataset))) as pool:
+        output = pool.map(parallel, dataset)
     
 
 if __name__ == "__main__":
