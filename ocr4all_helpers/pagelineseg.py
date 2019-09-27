@@ -27,6 +27,10 @@ import argparse
 
 import os
 
+def debug(line):
+    xx,yy = zip(*line)
+    return "xmin:{}, xmax:{}, ymin:{}, ymax:{}".format(min(xx),max(xx),min(yy),max(yy))
+
 # Add printing for every thread
 from threading import Lock
 s_print_lock = Lock()
@@ -64,13 +68,14 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
         if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
             ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
             ppoints = ppoints[1:] if ppoints else []
-            polygon = [(o[0].start+p[0], o[1].start+p[1]) for p in ppoints]
+            polygon = [(o[1].start+x, o[0].start+y) for x, y in ppoints]
         if not polygon:
-            polygon = [(o[0].start, o[1].start), (o[0].stop,  o[1].start),
-                       (o[0].stop,  o[1].stop),  (o[0].start, o[1].stop)]
+            polygon = [(o[1].start, o[0].start), (o[1].stop,  o[0].start),
+                       (o[1].stop,  o[0].stop),  (o[1].start, o[0].stop)]
         result.polygon = polygon
         result.mask = mask
         lines.append(result)
+
     return lines
 
 
@@ -108,7 +113,8 @@ def boundary(contour):
 
 # Approximate a single polygon around high pixels in a mask, via smearing
 def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), max_iterations=1000):
-    work_image = np.pad(np.copy(line_mask), pad_width=1, mode='constant', constant_values=False)
+    padding = 1
+    work_image = np.pad(np.copy(line_mask), pad_width=padding, mode='constant', constant_values=False)
 
     contours = find_contours(work_image, 0.5, fully_connected="low")
 
@@ -129,22 +135,22 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             smear_distance_y = math.ceil(height_median*smear_strength[1] * (iteration*growth[1]))
 
             # Smear image in x and y direction
-            width, height = work_image.shape
+            height, width = work_image.shape
             gaps_current_x = [float('Inf')]*height
             for x in range(width):
                 gap_current_y = float('Inf')
                 for y in range(height):
-                    if work_image[x, y]:
+                    if work_image[y, x]:
                         # Entered Contour
                         gap_current_x = gaps_current_x[y]
 
                         if gap_current_y < smear_distance_y and gap_current_y > 0:
                             # Draw over
-                            work_image[x, y-gap_current_y:y] = True
+                            work_image[y-gap_current_y:y, x] = True
                         
                         if gap_current_x < smear_distance_x and gap_current_x > 0:
                             #Draw over
-                            work_image[x-gap_current_x:x, y] = True
+                            work_image[y, x-gap_current_x:x] = True
 
                         gap_current_y = 0
                         gaps_current_x[y] = 0
@@ -163,7 +169,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
                 for contour in contours:
                     sorted_x = sorted(contour, key=lambda c: c[0])
                     sorted_y = sorted(contour, key=lambda c: c[1])
-                    extreme_points.append((tuple(sorted_x[0]), tuple(sorted_y[0]), tuple(sorted_x[-1]), tuple(sorted_y[-1])))
+                    extreme_points.append((tuple(sorted_x[0]), tuple(sorted_y[0]),
+                                           tuple(sorted_x[-1]), tuple(sorted_y[-1])))
                 
                 sorted_extreme = sorted(extreme_points, key=lambda e: e)
                 for c1, c2 in zip(sorted_extreme, sorted_extreme[1:]):
@@ -177,18 +184,16 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
                                 nearest_dist = distance
                         if nearest:
                             # Draw line between nearest points
-                            xx, yy, _ = line_aa(int(p1[0]), int(nearest[0]), int(p2[1]), int(nearest[1]))
+                            yy, xx, _ = line_aa(int(p1[0]), int(nearest[0]), int(p2[1]), int(nearest[1]))
                             # Remove border points
                             line_points = [(x, y) for x, y in zip(xx, yy) if 0 < x < width and 0 < y < height]
                             xx_filtered, yy_filtered = zip(*line_points) 
                             # Paint
-                            work_image[xx_filtered, yy_filtered] = True
+                            work_image[yy_filtered, xx_filtered] = True
                 contours = find_contours(work_image, 0.5, fully_connected="low")
 
             iteration += 1
-
-        simplified_contours = approximate_polygon(contours[0], 0.1)
-        return [(p[0], p[1]) for p in simplified_contours]
+        return [(p[1]-padding, p[0]-padding) for p in approximate_polygon(contours[0], 0.1)]
     return []
     
 
@@ -221,6 +226,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     im_rotated = im.rotate(orientation, expand=True, center=(im.width/2,im.height/2))
 
     a = np.array(im_rotated.convert('L')) if im_rotated.mode == '1' else np.array(im_rotated)
+
     binary = np.array(a > 0.5*(np.amin(a) + np.amax(a)), 'i')
     binary = 1 - binary
 
@@ -244,16 +250,16 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth, fail_save_iterations)
 
     # Translate each point back to original
-    deltaX = (im_rotated.width - im.width)
-    deltaY = (im_rotated.height - im.height)
+    deltaX = (im_rotated.width - im.width) / 2
+    deltaY = (im_rotated.height - im.height) / 2
     centerX = im_rotated.width / 2
     centerY = im_rotated.height / 2
 
     def translate_back(point):
         # rotate point around center
-        orient_rad = -orientation * (math.pi / 180)
-        rotatedY = point[0] * math.cos(orient_rad) - point[1] * math.sin(orient_rad)
-        rotatedX = point[0] * math.sin(orient_rad) + point[1] * math.cos(orient_rad)
+        orient_rad = orientation * (math.pi / 180)
+        rotatedX = point[0] * math.cos(orient_rad) - point[1] * math.sin(orient_rad)
+        rotatedY = point[0] * math.sin(orient_rad) + point[1] * math.cos(orient_rad)
         # move point 
         return (int(rotatedX-deltaX), int(rotatedY-deltaY))
 
@@ -320,7 +326,6 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         if len(coords) < 3:
             continue
         cropped, [minX, minY, maxX, maxY] = imgmanipulate.cutout(im, coords)
-        s_print(cropped, [minX, minY, maxX, maxY])
 
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
@@ -348,21 +353,21 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
 
         # Iterpret whole region as textline if no textline are found
         if not(lines) or len(lines) == 0:
-            coordstrg = " ".join([str(x[0])+","+str(x[1]) for x in coords])
+            coordstrg = " ".join([str(x)+","+str(y) for x, y in coords])
             textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
                                        attrib={"id": "{}_l{:03d}".format(c, n+1)})
             etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
-
         else:
             for n, poly in enumerate(lines):
                 if coordmap[c]["type"] == "drop-capital":
                     coordstrg = coordmap[c]["coordstring"]
                 else:
-                    coords = ((x[0]+minX-1, x[1]+minY-1) for x in poly)
-                    coordstrg = " ".join([str(int(x[0]))+","+str(int(x[1])) for x in coords])
+                    coords = ((x+minX-1, y+minY-1) for x, y in poly)
+                    coordstrg = " ".join([str(int(x))+","+str(int(y)) for x, y in coords])
+
                 textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
