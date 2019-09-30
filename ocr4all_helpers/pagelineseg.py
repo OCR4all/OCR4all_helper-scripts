@@ -223,7 +223,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
-    im_rotated = im.rotate(orientation, expand=True, center=(im.width/2,im.height/2))
+    im_rotated = im.rotate(orientation, expand=True)
 
     a = np.array(im_rotated.convert('L')) if im_rotated.mode == '1' else np.array(im_rotated)
 
@@ -258,8 +258,8 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     def translate_back(point):
         # rotate point around center
         orient_rad = orientation * (math.pi / 180)
-        rotatedX = point[0] * math.cos(orient_rad) - point[1] * math.sin(orient_rad)
-        rotatedY = point[0] * math.sin(orient_rad) + point[1] * math.cos(orient_rad)
+        rotatedX = (point[0]-centerX) * math.cos(orient_rad) - (point[1]-centerY) * math.sin(orient_rad) + centerX
+        rotatedY = (point[0]-centerX) * math.sin(orient_rad) + (point[1]-centerY) * math.cos(orient_rad) + centerY
         # move point 
         return (int(rotatedX-deltaX), int(rotatedY-deltaY))
 
@@ -365,7 +365,7 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                 if coordmap[c]["type"] == "drop-capital":
                     coordstrg = coordmap[c]["coordstring"]
                 else:
-                    coords = ((x+minX-1, y+minY-1) for x, y in poly)
+                    coords = ((x+minX, y+minY) for x, y in poly)
                     coordstrg = " ".join([str(int(x))+","+str(int(y)) for x, y in coords])
 
                 textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
