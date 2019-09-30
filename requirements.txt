@@ -2,5 +2,4 @@ numpy
 lxml
 scikit-image
 Pillow
-kraken
 argparse
