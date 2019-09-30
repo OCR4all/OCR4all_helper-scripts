@@ -11,6 +11,7 @@ setup(name='ocr4all_helpers',
       entry_points={
             'console_scripts': [
                   'pagelineseg=ocr4all_helpers.pagelineseg:main',
+                  'skewestimate=ocr4all_helpers.skewestimate:main',
                   'pagedir2pagexml=ocr4all_helpers.pagedir2pagexml:main'
             ],
       },

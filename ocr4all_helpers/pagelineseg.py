@@ -288,7 +288,6 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
     for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
         cc = []
         for point in c.xpath("./ns:Point", namespaces=ns):
-            # coordstrings = [x.split(",") for x in c.attrib["points"].split()]
             cx = point.attrib["x"]
             cy = point.attrib["y"]
             c.remove(point)
