@@ -86,13 +86,12 @@ def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
     if usegauss:
         # this uses Gaussians
         grad = gaussian_filter(1.0*cleaned, (vscale*0.3*scale,
-                                            hscale*6*scale),order=(1,0))
+                                            hscale*6*scale), order=(1, 0))
     else:
         # this uses non-Gaussian oriented filters
         grad = gaussian_filter(1.0*cleaned, (max(4, vscale*0.3*scale),
                                             hscale*scale), order=(1, 0))
         grad = uniform_filter(grad, (vscale,hscale*6*scale))
-
 
     def norm_max(a):
         return a/np.amax(a)
@@ -197,7 +196,9 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=1000):
+def segment(im, scale=None, maxcolseps=2, black_colseps=False,
+            smear_strength=(1,2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=1000,
+            vscale=1.0, hscale=1.0):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -240,7 +241,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     except ValueError:
         return []
 
-    bottom, top, boxmap = compute_gradmaps(binary, scale)
+    bottom, top, boxmap = compute_gradmaps(binary, scale, vscale, hscale)
     seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale)
     llabels1 = morph.propagate_labels(boxmap, seeds, conflict=0)
     spread = morph.spread_labels(seeds, maxdist=scale)
@@ -273,7 +274,14 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
     return lines
 
 
-def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(1, 2), growth=(1.1,1.1), fail_save_iterations=100):
+def pagexmllineseg(xmlfile, imgpath,
+                    scale=None,
+                    vscale=1.0,
+                    hscale=1.0,
+                    maxcolseps=-1,
+                    smear_strength=(1, 2),
+                    growth=(1.1,1.1),
+                    fail_save_iterations=100):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -311,15 +319,6 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
     im = Image.open(imgpath)
 
     for n, c in enumerate(sorted(coordmap)):
-        if type(scale) == dict:
-            if coordmap[c]['type'] in scale:
-                rscale = scale[coordmap[c]['type']]
-            elif "other" in scale:
-                rscale = scale["other"]
-            else:
-                rscale = None
-        else:
-            rscale = scale
         coords = coordmap[c]['coords']
         
         if len(coords) < 3:
@@ -342,10 +341,12 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps,
+                lines = segment(cropped, scale=scale, maxcolseps=maxcolseps,
                                 smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
-                                fail_save_iterations=fail_save_iterations)
+                                fail_save_iterations=fail_save_iterations,
+                                vscale=vscale, hscale=hscale)
+
         else:
             lines = []
 
@@ -387,7 +388,9 @@ def main():
     Line segmentation with regions read from a PAGE xml file
     """)
     parser.add_argument('DATASET',type=str,help='Path to the input dataset in json format with a list of image path, pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
-    parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
+    parser.add_argument('-s', '--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
+    parser.add_argument('--hscale', type=float, default=1.0, help='Non-standard scaling of horizontal parameters. (default: %(default)s)')
+    parser.add_argument('--vscale', type=float, default=1.0, help='non-standard scaling of vertical parameters. (default: %(default)s)')
     parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:%(default)s)')
     parser.add_argument('-x','--smearX', type=float, default=2, help='Smearing strength in X direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
     parser.add_argument('-y','--smearY', type=float, default=1, help='Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
@@ -408,6 +411,8 @@ def main():
 
         xml_output, number_lines = pagexmllineseg(pagexml, image, 
                                                     scale=args.scale,
+                                                    vscale=args.vscale,
+                                                    hscale=args.hscale,
                                                     maxcolseps=args.maxcolseps, 
                                                     smear_strength=(args.smearX, args.smearY), 
                                                     growth=(args.growthX,args.growthY),
