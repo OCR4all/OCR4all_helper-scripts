@@ -27,10 +27,6 @@ import argparse
 
 import os
 
-def debug(line):
-    xx,yy = zip(*line)
-    return "xmin:{}, xmax:{}, ymin:{}, ymax:{}".format(min(xx),max(xx),min(yy),max(yy))
-
 # Add printing for every thread
 from threading import Lock
 s_print_lock = Lock()
@@ -49,13 +45,13 @@ class record(object):
 #
 # Implementation derived from ocropy with changes to allow extracting
 # the line coords/polygons
-def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
+def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength=1.0):
     lobjects = morph.find_objects(segmentation)
     lines = []
     for i, o in enumerate(lobjects):
         if o is None:
             continue
-        if sl.dim1(o) < 2*scale or sl.dim0(o) < scale:
+        if sl.dim1(o) < 2*scale*filter_strength or sl.dim0(o) < scale*filter_strength:
             continue
         mask = (segmentation[o] == i+1)
         if np.amax(mask) == 0:
@@ -186,7 +182,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
                             yy, xx, _ = line_aa(int(p1[0]), int(nearest[0]), int(p2[1]), int(nearest[1]))
                             # Remove border points
                             line_points = [(x, y) for x, y in zip(xx, yy) if 0 < x < width and 0 < y < height]
-                            xx_filtered, yy_filtered = zip(*line_points) 
+                            xx_filtered, yy_filtered = zip(*line_points)
                             # Paint
                             work_image[yy_filtered, xx_filtered] = True
                 contours = find_contours(work_image, 0.5, fully_connected="low")
@@ -197,8 +193,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     
 
 def segment(im, scale=None, maxcolseps=2, black_colseps=False,
-            smear_strength=(1,2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=1000,
-            vscale=1.0, hscale=1.0):
+            smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
+            fail_save_iterations=1000, vscale=1.0, hscale=1.0):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -237,7 +233,10 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False,
     binary = pseg.remove_hlines(binary, scale)
     # emptyish images will cause exceptions here.
     try:
-        colseps, binary = pseg.compute_colseps(binary, scale, maxcolseps, black_colseps)
+        colseps, binary = pseg.compute_colseps(binary,
+                                               scale,
+                                               maxcolseps,
+                                               black_colseps)
     except ValueError:
         return []
 
@@ -248,7 +247,11 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False,
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
     segmentation = llabels*binary
 
-    lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth, fail_save_iterations)
+    lines_and_polygons = compute_lines(segmentation,
+                                       smear_strength,
+                                       scale,
+                                       growth,
+                                       fail_save_iterations)
 
     # Translate each point back to original
     deltaX = (im_rotated.width - im.width) / 2
@@ -259,29 +262,26 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False,
     def translate_back(point):
         # rotate point around center
         orient_rad = orientation * (math.pi / 180)
-        rotatedX = (point[0]-centerX) * math.cos(orient_rad) - (point[1]-centerY) * math.sin(orient_rad) + centerX
-        rotatedY = (point[0]-centerX) * math.sin(orient_rad) + (point[1]-centerY) * math.cos(orient_rad) + centerY
-        # move point 
+        rotatedX = ((point[0]-centerX) * math.cos(orient_rad)
+                    - (point[1]-centerY) * math.sin(orient_rad)
+                    + centerX)
+        rotatedY = ((point[0]-centerX) * math.sin(orient_rad)
+                    + (point[1]-centerY) * math.cos(orient_rad)
+                    + centerY)
+        # move point
         return (int(rotatedX-deltaX), int(rotatedY-deltaY))
 
-    lines = [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
-
-    # Sort lines for reading order
-    #order = pseg.reading_order([l.bounds for l in lines_and_polygons])
-    #lsort = pseg.topsort(order)
-    #lines = [lines_and_polygons[i].bounds for i in lsort]
-    #lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
-    return lines
+    return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
 
 def pagexmllineseg(xmlfile, imgpath,
-                    scale=None,
-                    vscale=1.0,
-                    hscale=1.0,
-                    maxcolseps=-1,
-                    smear_strength=(1, 2),
-                    growth=(1.1,1.1),
-                    fail_save_iterations=100):
+                   scale=None,
+                   vscale=1.0,
+                   hscale=1.0,
+                   maxcolseps=-1,
+                   smear_strength=(1, 2),
+                   growth=(1.1, 1.1),
+                   fail_save_iterations=100):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -320,7 +320,7 @@ def pagexmllineseg(xmlfile, imgpath,
 
     for n, c in enumerate(sorted(coordmap)):
         coords = coordmap[c]['coords']
-        
+
         if len(coords) < 3:
             continue
         cropped, [minX, minY, maxX, maxY] = imgmanipulate.cutout(im, coords)
@@ -383,50 +383,127 @@ def pagexmllineseg(xmlfile, imgpath,
     return xmlstring, no_lines_segm
 
 
-def main():
+# Command line interface for the pagelineseg script
+def cli():
     parser = argparse.ArgumentParser("""
     Line segmentation with regions read from a PAGE xml file
     """)
-    parser.add_argument('DATASET',type=str,help='Path to the input dataset in json format with a list of image path, pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
-    parser.add_argument('-s', '--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
-    parser.add_argument('--hscale', type=float, default=1.0, help='Non-standard scaling of horizontal parameters. (default: %(default)s)')
-    parser.add_argument('--vscale', type=float, default=1.0, help='non-standard scaling of vertical parameters. (default: %(default)s)')
-    parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:%(default)s)')
-    parser.add_argument('-x','--smearX', type=float, default=2, help='Smearing strength in X direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
-    parser.add_argument('-y','--smearY', type=float, default=1, help='Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
-    parser.add_argument('--growthX', type=float, default=1.1, help='Growth in X direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
-    parser.add_argument('--growthY', type=float, default=1.1, help='Growth in Y direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
-    parser.add_argument('--maxcolseps', type=int, default=-1, help='Maximum # whitespace column separators, (default: %(default)s)')
-    parser.add_argument('--fail_save', type=int, default=1000, help='Fail save to counter infinite loops when combining contours to a precise textlines. Will connect remaining contours with lines. (default: %(default)s)')
+    parser.add_argument('DATASET',
+                        type=str,
+                        help=('Path to the input dataset in json format with '
+                              'a list of image path, pagexml path and optional'
+                              ' output path. (Will overwrite pagexml if no '
+                              'output path is given)')
+                        )
+    parser.add_argument('-s', '--scale',
+                        type=float,
+                        default=None,
+                        help=('Scale of the input image used for the line'
+                              'segmentation. Will be estimated if not defined.')
+                        )
+    parser.add_argument('--hscale',
+                        type=float,
+                        default=1.0,
+                        help=('Non-standard scaling of horizontal parameters. '
+                              '(default: %(default)s)')
+                        )
+    parser.add_argument('--vscale',
+                        type=float,
+                        default=1.0,
+                        help=('non-standard scaling of vertical parameters. '
+                              '(default: %(default)s)')
+                        )
+    parser.add_argument('--filter_strength',
+                        type=float,
+                        default=1.0,
+                        help=('Strength individual characters are filtered out '
+                              'when creating a textline, default: %(default)s')
+                        )
+    parser.add_argument('-p', '--parallel',
+                        type=int,
+                        default=1,
+                        help=('Number of threads parallely working on images. '
+                              '(default:%(default)s)')
+                        )
+    parser.add_argument('-x', '--smearX',
+                        type=float,
+                        default=2,
+                        help=('Smearing strength in X direction for the '
+                              'algorithm calculating the textline polygon '
+                              'wrapping all contents. (default:%(default)s)'))
+    parser.add_argument('-y', '--smearY',
+                        type=float,
+                        default=1,
+                        help=('Smearing strength in Y direction for the '
+                              'algorithm calculating the textline polygon'
+                              ' wrapping all contents. (default:%(default)s)')
+                        )
+    parser.add_argument('--growthX',
+                        type=float,
+                        default=1.1,
+                        help=('Growth in X direction for every iteration of '
+                              'the Textline polygon finding. Will speed up the'
+                              ' algorithm at the cost of precision. '
+                              '(default: %(default)s)')
+                        )
+    parser.add_argument('--growthY',
+                        type=float,
+                        default=1.1,
+                        help=('Growth in Y direction for every iteration of '
+                              'the Textline polygon finding. Will speed up the'
+                              ' algorithm at the cost of precision. '
+                              '(default: %(default)s)')
+                        )
+    parser.add_argument('--maxcolseps',
+                        type=int,
+                        default=-1,
+                        help=('Maximum # whitespace column separators. '
+                              '(default: %(default)s)')
+                        )
+    parser.add_argument('--fail_save',
+                        type=int,
+                        default=1000,
+                        help=('Fail save to counter infinite loops when '
+                              'combining contours to a precise textlines. '
+                              'Will connect remaining contours with lines. '
+                              '(default: %(default)s)')
+                        )
                     
     args = parser.parse_args()
 
     with open(args.DATASET, 'r') as data_file:
         dataset = json.load(data_file)
 
-    # Parallel processes for the pagexmllineseg
+    # Parallel processes for the pagexmllineseg cli
     def parallel(data):
-        image,pagexml = data[:2]
-        pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
+        if len(data) == 3:
+            image, pagexml, path_out = data
+        elif len(data) == 2:
+            image, pagexml = data
+            path_out = pagexml
+        else:
+            raise ValueError("Invalid data line with length {} "
+                             "instead of 2 or 3".format(len(data)))
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, 
-                                                    scale=args.scale,
-                                                    vscale=args.vscale,
-                                                    hscale=args.hscale,
-                                                    maxcolseps=args.maxcolseps, 
-                                                    smear_strength=(args.smearX, args.smearY), 
-                                                    growth=(args.growthX,args.growthY),
-                                                    fail_save_iterations=args.fail_save)
-        with open(pagexml_out, 'w+') as output_file:
-            s_print("Save annotations into '{}'".format(pagexml_out))
+
+        xml_output, _ = pagexmllineseg(pagexml, image,
+                                       scale=args.scale,
+                                       vscale=args.vscale,
+                                       hscale=args.hscale,
+                                       maxcolseps=args.maxcolseps,
+                                       smear_strength=(args.smearX, args.smearY),
+                                       growth=(args.growthX, args.growthY),
+                                       fail_save_iterations=args.fail_save)
+        with open(path_out, 'w+') as output_file:
+            s_print("Save annotations into '{}'".format(path_out))
             output_file.write(xml_output)
     
     s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
 
     # Pool of all parallel processed pagexmllineseg
     with ThreadPool(processes=min(args.parallel, len(dataset))) as pool:
-        output = pool.map(parallel, dataset)
-    
+        pool.map(parallel, dataset)
+
 
 if __name__ == "__main__":
-    main()
+    cli()

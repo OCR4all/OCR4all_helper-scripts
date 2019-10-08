@@ -1,15 +1,8 @@
 # -*- coding: utf-8 -*-
 # Skew estimate script for regions of images with PAGE xml.
-
-import numpy as np
-from skimage.measure import find_contours, approximate_polygon
-from skimage.draw import line_aa
-from scipy.ndimage.filters import gaussian_filter, uniform_filter
-import math
-
 from lxml import etree
 from PIL import Image
-from ocr4all_helpers.lib import imgmanipulate, morph, sl, pseg, nlbin
+from ocr4all_helpers.lib import imgmanipulate, nlbin
 
 from multiprocessing.pool import ThreadPool
 import json
@@ -65,15 +58,23 @@ def pagexmlskewestimate(xmlfile, imgpath, from_scratch=False):
     return xmlstring, no_lines_segm
 
 
-def main():
+# Command line interface for the pagelineseg script
+def cli():
     parser = argparse.ArgumentParser("""
     Calculate skew angles for regions read from a PAGE xml file
     """)
-    parser.add_argument('DATASET', type=str, help=
-            'Path to the input dataset in json format with a list of image path,'+
-            'pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
-    parser.add_argument('-s', '--from_scratch', action='store_true', help=
-            'Overwrite existing orientation angles, by calculating them from scratch.')
+    parser.add_argument('DATASET',
+                        type=str,
+                        help=('Path to the input dataset in json format with a'
+                              ' list of image path, pagexml path and optional '
+                              'output path. (Will overwrite pagexml if no '
+                              'output path is given)')
+                        )
+    parser.add_argument('-s', '--from_scratch',
+                        action='store_true',
+                        help=('Overwrite existing orientation angles, by '
+                              'calculating them from scratch.')
+                        )
 
     args = parser.parse_args()
 
@@ -82,20 +83,27 @@ def main():
 
     # Parallel processes for the pagexmllineseg
     def parallel(data):
-        image, pagexml = data[:2]
-        pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
+        if len(data) == 3:
+            image, pagexml, pagexml_out = data
+        elif len(data) == 2:
+            image, pagexml = data
+            pagexml_out = pagexml
+        else:
+            raise ValueError("Invalid data line with length {} "
+                             "instead of 2 or 3".format(len(data)))
 
-        xml_output, number_lines = pagexmlskewestimate(pagexml, image, args.from_scratch)
+        xml_output, _ = pagexmlskewestimate(pagexml, image, args.from_scratch)
         with open(pagexml_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
-    
-    s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
+
+    s_print("Process {} images, with {} in parallel"
+            .format(len(dataset), args.parallel))
 
     # Pool of all parallel processed pagexmllineseg
     with ThreadPool(processes=min(args.parallel, len(dataset))) as pool:
-        output = pool.map(parallel, dataset)
-    
+        pool.map(parallel, dataset)
+
 
 if __name__ == "__main__":
-    main()
+    cli()
