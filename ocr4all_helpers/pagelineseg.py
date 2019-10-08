@@ -194,7 +194,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
 
 def segment(im, scale=None, maxcolseps=2, black_colseps=False,
             smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
-            fail_save_iterations=1000, vscale=1.0, hscale=1.0):
+            fail_save_iterations=1000, vscale=1.0, hscale=1.0,
+            threshold=0.2):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -241,7 +242,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False,
         return []
 
     bottom, top, boxmap = compute_gradmaps(binary, scale, vscale, hscale)
-    seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale)
+    seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale, threshold=threshold)
     llabels1 = morph.propagate_labels(boxmap, seeds, conflict=0)
     spread = morph.spread_labels(seeds, maxdist=scale)
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
@@ -388,6 +389,7 @@ def cli():
     parser = argparse.ArgumentParser("""
     Line segmentation with regions read from a PAGE xml file
     """)
+    # input
     parser.add_argument('DATASET',
                         type=str,
                         help=('Path to the input dataset in json format with '
@@ -395,6 +397,8 @@ def cli():
                               ' output path. (Will overwrite pagexml if no '
                               'output path is given)')
                         )
+
+    # scale parameters
     parser.add_argument('-s', '--scale',
                         type=float,
                         default=None,
@@ -413,6 +417,8 @@ def cli():
                         help=('non-standard scaling of vertical parameters. '
                               '(default: %(default)s)')
                         )
+
+    # line extraction
     parser.add_argument('--filter_strength',
                         type=float,
                         default=1.0,
@@ -454,18 +460,20 @@ def cli():
                               ' algorithm at the cost of precision. '
                               '(default: %(default)s)')
                         )
-    parser.add_argument('--maxcolseps',
-                        type=int,
-                        default=-1,
-                        help=('Maximum # whitespace column separators. '
-                              '(default: %(default)s)')
-                        )
     parser.add_argument('--fail_save',
                         type=int,
                         default=1000,
                         help=('Fail save to counter infinite loops when '
                               'combining contours to a precise textlines. '
                               'Will connect remaining contours with lines. '
+                              '(default: %(default)s)')
+                        )
+
+    # column parameters
+    parser.add_argument('--maxcolseps',
+                        type=int,
+                        default=-1,
+                        help=('Maximum # whitespace column separators. '
                               '(default: %(default)s)')
                         )
                     
@@ -484,7 +492,6 @@ def cli():
         else:
             raise ValueError("Invalid data line with length {} "
                              "instead of 2 or 3".format(len(data)))
-
 
         xml_output, _ = pagexmllineseg(pagexml, image,
                                        scale=args.scale,
