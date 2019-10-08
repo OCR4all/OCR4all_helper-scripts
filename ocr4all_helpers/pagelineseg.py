@@ -390,92 +390,104 @@ def cli():
     Line segmentation with regions read from a PAGE xml file
     """)
     # input
-    parser.add_argument('DATASET',
-                        type=str,
-                        help=('Path to the input dataset in json format with '
-                              'a list of image path, pagexml path and optional'
-                              ' output path. (Will overwrite pagexml if no '
-                              'output path is given)')
-                        )
+    g_in = parser.add_argument_group('input')
+    g_in.add_argument('DATASET',
+                      type=str,
+                      help=('Path to the input dataset in json format with '
+                            'a list of image path, pagexml path and optional'
+                            ' output path. (Will overwrite pagexml if no '
+                            'output path is given)')
+                      )
+
+    # line parameters
+    g_line = parser.add_argument_group('line parameters')
+    g_line.add_argument('--threshold',
+                        type=float,
+                        default=0.2,
+                        help='baseline threshold, default: %(default)s')
 
     # scale parameters
-    parser.add_argument('-s', '--scale',
-                        type=float,
-                        default=None,
-                        help=('Scale of the input image used for the line'
-                              'segmentation. Will be estimated if not defined.')
-                        )
-    parser.add_argument('--hscale',
-                        type=float,
-                        default=1.0,
-                        help=('Non-standard scaling of horizontal parameters. '
-                              '(default: %(default)s)')
-                        )
-    parser.add_argument('--vscale',
-                        type=float,
-                        default=1.0,
-                        help=('non-standard scaling of vertical parameters. '
-                              '(default: %(default)s)')
-                        )
+    g_scale = parser.add_argument_group('scale parameters')
+    g_scale.add_argument('-s', '--scale',
+                         type=float,
+                         default=None,
+                         help=('Scale of the input image used for the line'
+                               'segmentation. Will be estimated if not defined.')
+                         )
+    g_scale.add_argument('--hscale',
+                         type=float,
+                         default=1.0,
+                         help=('Non-standard scaling of horizontal parameters.'
+                               ' (default: %(default)s)')
+                         )
+    g_scale.add_argument('--vscale',
+                         type=float,
+                         default=1.0,
+                         help=('non-standard scaling of vertical parameters. '
+                               '(default: %(default)s)')
+                         )
 
     # line extraction
-    parser.add_argument('--filter_strength',
-                        type=float,
-                        default=1.0,
-                        help=('Strength individual characters are filtered out '
-                              'when creating a textline, default: %(default)s')
-                        )
-    parser.add_argument('-p', '--parallel',
-                        type=int,
-                        default=1,
-                        help=('Number of threads parallely working on images. '
-                              '(default:%(default)s)')
-                        )
-    parser.add_argument('-x', '--smearX',
-                        type=float,
-                        default=2,
-                        help=('Smearing strength in X direction for the '
-                              'algorithm calculating the textline polygon '
-                              'wrapping all contents. (default:%(default)s)'))
-    parser.add_argument('-y', '--smearY',
-                        type=float,
-                        default=1,
-                        help=('Smearing strength in Y direction for the '
-                              'algorithm calculating the textline polygon'
-                              ' wrapping all contents. (default:%(default)s)')
-                        )
-    parser.add_argument('--growthX',
-                        type=float,
-                        default=1.1,
-                        help=('Growth in X direction for every iteration of '
-                              'the Textline polygon finding. Will speed up the'
-                              ' algorithm at the cost of precision. '
-                              '(default: %(default)s)')
-                        )
-    parser.add_argument('--growthY',
-                        type=float,
-                        default=1.1,
-                        help=('Growth in Y direction for every iteration of '
-                              'the Textline polygon finding. Will speed up the'
-                              ' algorithm at the cost of precision. '
-                              '(default: %(default)s)')
-                        )
-    parser.add_argument('--fail_save',
-                        type=int,
-                        default=1000,
-                        help=('Fail save to counter infinite loops when '
-                              'combining contours to a precise textlines. '
-                              'Will connect remaining contours with lines. '
-                              '(default: %(default)s)')
-                        )
+    g_ext = parser.add_argument_group('extraction parameters')
+    g_ext.add_argument('--filter_strength',
+                       type=float,
+                       default=1.0,
+                       help=('Strength individual characters are filtered out '
+                             'when creating a textline, default: %(default)s')
+                       )
+    g_ext.add_argument('-p', '--parallel',
+                       type=int,
+                       default=1,
+                       help=('Number of threads parallely working on images. '
+                             '(default:%(default)s)')
+                       )
+    g_ext.add_argument('-x', '--smearX',
+                       type=float,
+                       default=2,
+                       help=('Smearing strength in X direction for the '
+                             'algorithm calculating the textline polygon '
+                             'wrapping all contents. (default:%(default)s)')
+                       )
+    g_ext.add_argument('-y', '--smearY',
+                       type=float,
+                       default=1,
+                       help=('Smearing strength in Y direction for the '
+                             'algorithm calculating the textline polygon'
+                             ' wrapping all contents. (default:%(default)s)')
+                       )
+    g_ext.add_argument('--growthX',
+                       type=float,
+                       default=1.1,
+                       help=('Growth in X direction for every iteration of '
+                             'the Textline polygon finding. Will speed up the'
+                             ' algorithm at the cost of precision. '
+                             '(default: %(default)s)')
+                       )
+    g_ext.add_argument('--growthY',
+                       type=float,
+                       default=1.1,
+                       help=('Growth in Y direction for every iteration of '
+                             'the Textline polygon finding. Will speed up the'
+                             ' algorithm at the cost of precision. '
+                             '(default: %(default)s)')
+                       )
+    g_ext.add_argument('--fail_save',
+                       type=int,
+                       default=1000,
+                       help=('Fail save to counter infinite loops when '
+                             'combining contours to a precise textlines. '
+                             'Will connect remaining contours with lines. '
+                             '(default: %(default)s)')
+                       )
 
     # column parameters
-    parser.add_argument('--maxcolseps',
-                        type=int,
-                        default=-1,
-                        help=('Maximum # whitespace column separators. '
-                              '(default: %(default)s)')
-                        )
+    g_col = parser.add_argument_group('column parameters')
+    g_col.add_argument('--maxcolseps',
+                       type=int,
+                       default=-1,
+                       help=('Maximum # whitespace column separators. '
+                             '(default: %(default)s)')
+                       )
                     
     args = parser.parse_args()
 
