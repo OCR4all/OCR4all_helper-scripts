@@ -12,10 +12,16 @@ from ocr4all_helpers.lib import morph, sl
 
 
 # Computes column separators either from vertical black lines or whitespace.
-def compute_colseps(binary, scale, maxblackseps, maxwhiteseps):
-    colseps = compute_colseps_conv(binary, scale, maxwhiteseps=maxwhiteseps)
-    if maxblackseps > 0:
-        seps = compute_separators_morph(binary, scale, maxblackseps=maxblackseps)
+def compute_colseps(binary, scale,
+                    max_blackseps, widen_blackseps,
+                    max_whiteseps, minheight_whiteseps, minaspect_whiteseps):
+    colseps = compute_colseps_conv(binary, scale,
+                                   minheight_whiteseps=minheight_whiteseps,
+                                   max_whiteseps=max_whiteseps)
+    if max_blackseps > 0:
+        seps = compute_separators_morph(binary, scale,
+                                        max_blackseps=max_blackseps,
+                                        widen_blackseps=widen_blackseps)
         colseps = np.maximum(colseps, seps)
         binary = np.minimum(binary, 1-seps)
     return colseps, binary
@@ -33,7 +39,7 @@ def compute_boxmap(binary,scale,threshold=(.5,4),dtype='i'):
 
 
 # Find column separators by convolution and thresholding.
-def compute_colseps_conv(binary, scale=1.0, csminheight=10, maxwhiteseps=3):
+def compute_colseps_conv(binary, scale=1.0, minheight_whiteseps=10, max_whiteseps=3):
     h, w = binary.shape
     # find vertical whitespace by thresholding
     smoothed = gaussian_filter(1.0*binary, (scale, scale*0.5))
@@ -48,19 +54,19 @@ def compute_colseps_conv(binary, scale=1.0, csminheight=10, maxwhiteseps=3):
     seps = np.minimum(thresh, maximum_filter(grad, (int(scale), int(5*scale))))
     seps = maximum_filter(seps, (int(2*scale), 1))
     # select only the biggest column separators
-    seps = morph.select_regions(seps, sl.dim0, min=csminheight*scale, nbest=maxwhiteseps)
+    seps = morph.select_regions(seps, sl.dim0, min=minheight_whiteseps*scale, nbest=max_whiteseps)
     return seps
 
 
 # Finds vertical black lines corresponding to column separators.
-def compute_separators_morph(binary, scale, maxblackseps=0, sepwiden=10):
+def compute_separators_morph(binary, scale, max_blackseps=0, sepwiden=10):
     d0 = int(max(5, scale/4))
     d1 = int(max(5, scale))+sepwiden
     thick = morph.r_dilation(binary, (d0, d1))
     vert = morph.rb_opening(thick, (10*scale, 1))
     vert = morph.r_erosion(vert, (d0//2, sepwiden))
-    vert = morph.select_regions(vert, sl.dim1, min=3, nbest=2*maxblackseps)
-    vert = morph.select_regions(vert, sl.dim0, min=20*scale, nbest=maxblackseps)
+    vert = morph.select_regions(vert, sl.dim1, min=3, nbest=2*max_blackseps)
+    vert = morph.select_regions(vert, sl.dim0, min=20*scale, nbest=max_blackseps)
     return vert
 
 

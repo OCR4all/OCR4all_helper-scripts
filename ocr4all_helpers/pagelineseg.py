@@ -196,7 +196,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     
 
 def segment(im, scale=None,
-            maxblackseps=0, maxwhiteseps=3, black_colseps=False,
+            max_blackseps=0, widen_blackseps=10,
+            max_whiteseps=3, minheight_whiteseps=10,
             smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
             fail_save_iterations=1000, vscale=1.0, hscale=1.0,
             minscale=12.0, maxlines=300,
@@ -230,8 +231,10 @@ def segment(im, scale=None,
     try:
         colseps, binary = pseg.compute_colseps(binary,
                                                scale,
-                                               maxblackseps,
-                                               maxwhiteseps)
+                                               max_blackseps,
+                                               widen_blackseps,
+                                               max_whiteseps,
+                                               minheight_whiteseps)
     except ValueError:
         return []
 
@@ -277,8 +280,10 @@ def pagexmllineseg(xmlfile, imgpath,
                    scale=None,
                    vscale=1.0,
                    hscale=1.0,
-                   maxblackseps=0,
-                   maxwhiteseps=-1,
+                   max_blackseps=0,
+                   widen_blackseps=10,
+                   max_whiteseps=-1,
+                   minheight_whiteseps=10,
                    smear_strength=(1, 2),
                    growth=(1.1, 1.1),
                    fail_save_iterations=100):
@@ -341,7 +346,11 @@ def pagexmllineseg(xmlfile, imgpath,
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=scale, maxblackseps=maxblackseps, maxwhiteseps=maxwhiteseps,
+                lines = segment(cropped, scale=scale,
+                                max_blackseps=max_blackseps,
+                                widen_blackseps=widen_blackseps
+                                max_whiteseps=max_whiteseps,
+                                minheight_whiteseps=minheight_whiteseps,
                                 smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
                                 fail_save_iterations=fail_save_iterations,
@@ -496,19 +505,34 @@ def cli():
                        )
 
     # column parameters
-    g_col = parser.add_argument_group('column parameters')
-    g_col.add_argument('--maxwhiteseps','--maxcolseps',
+    g_colb = parser.add_argument_group('Black column parameters')
+    g_colb.add_argument('--max_blackseps','--maxseps',
+                       #--maxseps to be consistent with ocropy
+                       type=int,
+                       default=0,
+                       help=('Maximum # black column separators, '
+                             'default: %(default)s')
+                       )
+    g_colb.add_argument('--widen_blackseps','--sepwiden',
+                       #--sepwiden to be consistent with ocropy
+                       type=int,
+                       default=10,
+                       help=('Widen black separators (to account for warping),'
+                             ' default: %(default)s')
+                       )
+    g_colw = parser.add_argument_group('White column parameters')
+    g_colw.add_argument('--max_whiteseps','--maxcolseps',
                        #--maxcolseps to be consistent with ocropy
                        type=int,
                        default=-1,
                        help=('Maximum # whitespace column separators. '
                              '(default: %(default)s)')
                        )
-    g_col.add_argument('--maxblackseps','--maxseps',
-                       #--maxseps to be consistent with ocropy
-                       type=int,
-                       default=0,
-                       help=('Maximum # black column separators, '
+    gcolw.add_argument('--minheight_whiteseps', '--csminheight',
+                       #--csminheight to be consistent with ocropy
+                       type=float,
+                       default=10,
+                       help=('minimum column height (units=scale), '
                              'default: %(default)s')
                        )
                     
@@ -532,8 +556,10 @@ def cli():
                                        scale=args.scale,
                                        vscale=args.vscale,
                                        hscale=args.hscale,
-                                       maxblackseps=args.maxblackseps,
-                                       maxwhiteseps=args.maxwhiteseps,
+                                       max_blackseps=args.max_blackseps,
+                                       widen_blackseps=ars.widen_blackseps,
+                                       max_whiteseps=args.max_whiteseps,
+                                       minheight_whiteseps=args.minheight_whiteseps,
                                        smear_strength=(args.smearX, args.smearY),
                                        growth=(args.growthX, args.growthY),
                                        fail_save_iterations=args.fail_save)
