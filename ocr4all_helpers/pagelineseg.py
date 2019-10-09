@@ -201,7 +201,7 @@ def segment(im, scale=None,
             smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
             fail_save_iterations=1000, vscale=1.0, hscale=1.0,
             minscale=12.0, maxlines=300,
-            threshold=0.2):
+            threshold=0.2, usegauss=False):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -238,7 +238,7 @@ def segment(im, scale=None,
     except ValueError:
         return []
 
-    bottom, top, boxmap = compute_gradmaps(binary, scale, vscale, hscale)
+    bottom, top, boxmap = compute_gradmaps(binary, scale, vscale, hscale, usegauss)
     seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale, threshold=threshold)
     llabels1 = morph.propagate_labels(boxmap, seeds, conflict=0)
     spread = morph.spread_labels(seeds, maxdist=scale)
@@ -246,7 +246,7 @@ def segment(im, scale=None,
     segmentation = llabels*binary
 
     if np.amax(segmentation) > maxlines:
-        print_error("too many lines {}".format(np.amax(segmentation))
+        print_error("too many lines {}".format(np.amax(segmentation)))
         return
 
     lines_and_polygons = compute_lines(segmentation,
@@ -286,7 +286,8 @@ def pagexmllineseg(xmlfile, imgpath,
                    minheight_whiteseps=10,
                    smear_strength=(1, 2),
                    growth=(1.1, 1.1),
-                   fail_save_iterations=100):
+                   fail_save_iterations=100,
+                   usegauss=False):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -348,15 +349,15 @@ def pagexmllineseg(xmlfile, imgpath,
                 # if line in
                 lines = segment(cropped, scale=scale,
                                 max_blackseps=max_blackseps,
-                                widen_blackseps=widen_blackseps
+                                widen_blackseps=widen_blackseps,
                                 max_whiteseps=max_whiteseps,
                                 minheight_whiteseps=minheight_whiteseps,
                                 smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
                                 fail_save_iterations=fail_save_iterations,
                                 vscale=vscale, hscale=hscale,
-                                minscale=minscale, maxlines=maxlines
-                                )
+                                minscale=minscale, maxlines=maxlines,
+                                usegauss=usegauss)
 
         else:
             lines = []
@@ -428,6 +429,11 @@ def cli():
                         type=float,
                         default=0.2,
                         help='baseline threshold, default: %(default)s'
+                        )
+    g_line.add_argument('--usegauss',
+                        action='store_true',
+                        help=('use gaussian instead of uniform, '
+                              'default: %(default)s')
                         )
 
     # scale parameters
@@ -528,7 +534,7 @@ def cli():
                        help=('Maximum # whitespace column separators. '
                              '(default: %(default)s)')
                        )
-    gcolw.add_argument('--minheight_whiteseps', '--csminheight',
+    g_colw.add_argument('--minheight_whiteseps', '--csminheight',
                        #--csminheight to be consistent with ocropy
                        type=float,
                        default=10,
@@ -557,12 +563,13 @@ def cli():
                                        vscale=args.vscale,
                                        hscale=args.hscale,
                                        max_blackseps=args.max_blackseps,
-                                       widen_blackseps=ars.widen_blackseps,
+                                       widen_blackseps=args.widen_blackseps,
                                        max_whiteseps=args.max_whiteseps,
                                        minheight_whiteseps=args.minheight_whiteseps,
                                        smear_strength=(args.smearX, args.smearY),
                                        growth=(args.growthX, args.growthY),
-                                       fail_save_iterations=args.fail_save)
+                                       fail_save_iterations=args.fail_save,
+                                       usegauss=args.usegauss)
         with open(path_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(path_out))
             output_file.write(xml_output)
