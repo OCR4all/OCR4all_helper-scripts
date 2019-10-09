@@ -34,6 +34,9 @@ def s_print(*a, **b):
     with s_print_lock:
         print(*a, **b)
 
+def s_print_error(*objs):
+    s_print("ERROR: ", *objs, file=sys.stderr)
+
 
 class record(object):
     def __init__(self, **kw):
@@ -192,28 +195,16 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None, maxcolseps=2, black_colseps=False,
+def segment(im, scale=None,
+            maxblackseps=0, maxwhiteseps=3, black_colseps=False,
             smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
             fail_save_iterations=1000, vscale=1.0, hscale=1.0,
+            minscale=12.0, maxlines=300,
             threshold=0.2):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
     each line in reading order.
-    Args:
-        im (PIL.Image): A bi-level page of mode '1' or 'L'
-        scale (float): Scale of the image
-        maxcolseps (int): Maximum number of whitespace column separators
-        black_colseps (bool): Whether column separators are assumed to be
-                              vertical black lines or not
-        growth (float): Tolerance for the polygons wrapping textlines
-    Returns:
-        {'boxes': [(x1, y1, x2, y2),...]}: A
-        dictionary containing the text direction and a list of reading order
-        sorted bounding boxes under the key 'boxes'.
-    Raises:
-        ValueError if the input image is not binarized or the text
-        direction is invalid.
     """
 
     colors = im.getcolors(2)
@@ -230,14 +221,17 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False,
 
     if not scale:
         scale = pseg.estimate_scale(binary)
+    if scale < minscale:
+        s_print_error("scale ({}) less than --minscale; skipping".format(scale))
+        return
 
     binary = pseg.remove_hlines(binary, scale)
     # emptyish images will cause exceptions here.
     try:
         colseps, binary = pseg.compute_colseps(binary,
                                                scale,
-                                               maxcolseps,
-                                               black_colseps)
+                                               maxblackseps,
+                                               maxwhiteseps)
     except ValueError:
         return []
 
@@ -247,6 +241,10 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False,
     spread = morph.spread_labels(seeds, maxdist=scale)
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
     segmentation = llabels*binary
+
+    if np.amax(segmentation) > maxlines:
+        print_error("too many lines {}".format(np.amax(segmentation))
+        return
 
     lines_and_polygons = compute_lines(segmentation,
                                        smear_strength,
@@ -279,7 +277,8 @@ def pagexmllineseg(xmlfile, imgpath,
                    scale=None,
                    vscale=1.0,
                    hscale=1.0,
-                   maxcolseps=-1,
+                   maxblackseps=0,
+                   maxwhiteseps=-1,
                    smear_strength=(1, 2),
                    growth=(1.1, 1.1),
                    fail_save_iterations=100):
@@ -342,11 +341,13 @@ def pagexmllineseg(xmlfile, imgpath,
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=scale, maxcolseps=maxcolseps,
+                lines = segment(cropped, scale=scale, maxblackseps=maxblackseps, maxwhiteseps=maxwhiteseps,
                                 smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
                                 fail_save_iterations=fail_save_iterations,
-                                vscale=vscale, hscale=hscale)
+                                vscale=vscale, hscale=hscale,
+                                minscale=minscale, maxlines=maxlines
+                                )
 
         else:
             lines = []
@@ -398,13 +399,27 @@ def cli():
                             ' output path. (Will overwrite pagexml if no '
                             'output path is given)')
                       )
+ 
+    # limits
+    g_limit = parser.add_argument_group('limit parameters')
+    g_limit.add_argument('--minscale',
+                         type=float,
+                         default=12.0,
+                         help='minimum scale permitted, default: %(default)s'
+                         )
+    g_limit.add_argument('--maxlines',
+                         type=float,
+                         default=300,
+                         help='maximum # lines permitted, default: %(default)s'
+                         )
 
     # line parameters
     g_line = parser.add_argument_group('line parameters')
     g_line.add_argument('--threshold',
                         type=float,
                         default=0.2,
-                        help='baseline threshold, default: %(default)s')
+                        help='baseline threshold, default: %(default)s'
+                        )
 
     # scale parameters
     g_scale = parser.add_argument_group('scale parameters')
@@ -426,15 +441,15 @@ def cli():
                          help=('non-standard scaling of vertical parameters. '
                                '(default: %(default)s)')
                          )
+    g_scale.add_argument('--filter_strength',
+                         type=float,
+                         default=1.0,
+                         help=('Strength individual characters are filtered out '
+                               'when creating a textline, default: %(default)s')
+                         )
 
     # line extraction
     g_ext = parser.add_argument_group('extraction parameters')
-    g_ext.add_argument('--filter_strength',
-                       type=float,
-                       default=1.0,
-                       help=('Strength individual characters are filtered out '
-                             'when creating a textline, default: %(default)s')
-                       )
     g_ext.add_argument('-p', '--parallel',
                        type=int,
                        default=1,
@@ -482,11 +497,19 @@ def cli():
 
     # column parameters
     g_col = parser.add_argument_group('column parameters')
-    g_col.add_argument('--maxcolseps',
+    g_col.add_argument('--maxwhiteseps','--maxcolseps',
+                       #--maxcolseps to be consistent with ocropy
                        type=int,
                        default=-1,
                        help=('Maximum # whitespace column separators. '
                              '(default: %(default)s)')
+                       )
+    g_col.add_argument('--maxblackseps','--maxseps',
+                       #--maxseps to be consistent with ocropy
+                       type=int,
+                       default=0,
+                       help=('Maximum # black column separators, '
+                             'default: %(default)s')
                        )
                     
     args = parser.parse_args()
@@ -509,7 +532,8 @@ def cli():
                                        scale=args.scale,
                                        vscale=args.vscale,
                                        hscale=args.hscale,
-                                       maxcolseps=args.maxcolseps,
+                                       maxblackseps=args.maxblackseps,
+                                       maxwhiteseps=args.maxwhiteseps,
                                        smear_strength=(args.smearX, args.smearY),
                                        growth=(args.growthX, args.growthY),
                                        fail_save_iterations=args.fail_save)
