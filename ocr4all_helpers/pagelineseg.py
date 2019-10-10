@@ -17,7 +17,7 @@ from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
 
 from lxml import etree
-from PIL import Image
+from PIL import Image, ImageDraw
 from ocr4all_helpers.lib import imgmanipulate, morph, sl, pseg, nlbin
 
 from multiprocessing.pool import ThreadPool
@@ -26,10 +26,7 @@ import json
 import argparse
 
 import os
-
-def debug(line):
-    xx,yy = zip(*line)
-    return "xmin:{}, xmax:{}, ymin:{}, ymax:{}".format(min(xx),max(xx),min(yy),max(yy))
+import sys
 
 # Add printing for every thread
 from threading import Lock
@@ -37,6 +34,10 @@ s_print_lock = Lock()
 def s_print(*a, **b):
     with s_print_lock:
         print(*a, **b)
+
+
+def s_print_error(*objs):
+    s_print("ERROR: ", *objs, file=sys.stderr)
 
 
 class record(object):
@@ -49,13 +50,13 @@ class record(object):
 #
 # Implementation derived from ocropy with changes to allow extracting
 # the line coords/polygons
-def compute_lines(segmentation, smear_strength, scale, growth, max_iterations):
+def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength=1.0):
     lobjects = morph.find_objects(segmentation)
     lines = []
     for i, o in enumerate(lobjects):
         if o is None:
             continue
-        if sl.dim1(o) < 2*scale or sl.dim0(o) < scale:
+        if sl.dim1(o) < 2*scale*filter_strength or sl.dim0(o) < scale*filter_strength:
             continue
         mask = (segmentation[o] == i+1)
         if np.amax(mask) == 0:
@@ -86,13 +87,12 @@ def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
     if usegauss:
         # this uses Gaussians
         grad = gaussian_filter(1.0*cleaned, (vscale*0.3*scale,
-                                            hscale*6*scale),order=(1,0))
+                                            hscale*6*scale), order=(1, 0))
     else:
         # this uses non-Gaussian oriented filters
         grad = gaussian_filter(1.0*cleaned, (max(4, vscale*0.3*scale),
                                             hscale*scale), order=(1, 0))
         grad = uniform_filter(grad, (vscale,hscale*6*scale))
-
 
     def norm_max(a):
         return a/np.amax(a)
@@ -130,7 +130,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             width_median = sorted(widths)[int(len(widths) / 2)]
             height_median = sorted(heights)[int(len(heights) / 2)]
 
-            # Calculate x and y smear distance 
+            # Calculate x and y smear distance
             smear_distance_x = math.ceil(width_median*smear_strength[0] * (iteration*growth[0]))
             smear_distance_y = math.ceil(height_median*smear_strength[1] * (iteration*growth[1]))
 
@@ -164,7 +164,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             # Failsave if contours can't be smeared together after x iterations
             # Draw lines between the extreme points of each contour in order
             if iteration >= max_iterations and len(contours) > 1:
-                s_print("Start fail save, since precise line generation took too many iterations ({}).".format(iteration))
+                s_print(("Start fail save, since precise line generation took"
+                         " too many iterations ({}).").format(iteration))
                 extreme_points = []
                 for contour in contours:
                     sorted_x = sorted(contour, key=lambda c: c[0])
@@ -187,7 +188,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
                             yy, xx, _ = line_aa(int(p1[0]), int(nearest[0]), int(p2[1]), int(nearest[1]))
                             # Remove border points
                             line_points = [(x, y) for x, y in zip(xx, yy) if 0 < x < width and 0 < y < height]
-                            xx_filtered, yy_filtered = zip(*line_points) 
+                            xx_filtered, yy_filtered = zip(*line_points)
                             # Paint
                             work_image[yy_filtered, xx_filtered] = True
                 contours = find_contours(work_image, 0.5, fully_connected="low")
@@ -197,25 +198,17 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1,2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=1000):
+def segment(im, scale=None,
+            max_blackseps=0, widen_blackseps=10,
+            max_whiteseps=3, minheight_whiteseps=10,
+            smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
+            fail_save_iterations=1000, vscale=1.0, hscale=1.0,
+            minscale=12.0, maxlines=300,
+            threshold=0.2, usegauss=False):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
     each line in reading order.
-    Args:
-        im (PIL.Image): A bi-level page of mode '1' or 'L'
-        scale (float): Scale of the image
-        maxcolseps (int): Maximum number of whitespace column separators
-        black_colseps (bool): Whether column separators are assumed to be
-                              vertical black lines or not
-        growth (float): Tolerance for the polygons wrapping textlines
-    Returns:
-        {'boxes': [(x1, y1, x2, y2),...]}: A
-        dictionary containing the text direction and a list of reading order
-        sorted bounding boxes under the key 'boxes'.
-    Raises:
-        ValueError if the input image is not binarized or the text
-        direction is invalid.
     """
 
     colors = im.getcolors(2)
@@ -223,7 +216,7 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
-    im_rotated = im.rotate(orientation, expand=True)
+    im_rotated = im.rotate(-1*orientation, expand=True)
 
     a = np.array(im_rotated.convert('L')) if im_rotated.mode == '1' else np.array(im_rotated)
 
@@ -232,22 +225,38 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
 
     if not scale:
         scale = pseg.estimate_scale(binary)
+    if scale < minscale:
+        s_print_error("scale ({}) less than --minscale; skipping".format(scale))
+        return
 
     binary = pseg.remove_hlines(binary, scale)
     # emptyish images will cause exceptions here.
     try:
-        colseps, binary = pseg.compute_colseps(binary, scale, maxcolseps, black_colseps)
+        colseps, binary = pseg.compute_colseps(binary,
+                                               scale,
+                                               max_blackseps,
+                                               widen_blackseps,
+                                               max_whiteseps,
+                                               minheight_whiteseps)
     except ValueError:
         return []
 
-    bottom, top, boxmap = compute_gradmaps(binary, scale)
-    seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale)
+    bottom, top, boxmap = compute_gradmaps(binary, scale, vscale, hscale, usegauss)
+    seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale, threshold=threshold)
     llabels1 = morph.propagate_labels(boxmap, seeds, conflict=0)
     spread = morph.spread_labels(seeds, maxdist=scale)
     llabels = np.where(llabels1 > 0, llabels1, spread*binary)
     segmentation = llabels*binary
 
-    lines_and_polygons = compute_lines(segmentation, smear_strength, scale, growth, fail_save_iterations)
+    if np.amax(segmentation) > maxlines:
+        s_print_error("too many lines {}".format(np.amax(segmentation)))
+        return
+
+    lines_and_polygons = compute_lines(segmentation,
+                                       smear_strength,
+                                       scale,
+                                       growth,
+                                       fail_save_iterations)
 
     # Translate each point back to original
     deltaX = (im_rotated.width - im.width) / 2
@@ -257,23 +266,36 @@ def segment(im, scale=None, maxcolseps=2, black_colseps=False, smear_strength=(1
 
     def translate_back(point):
         # rotate point around center
-        orient_rad = orientation * (math.pi / 180)
-        rotatedX = (point[0]-centerX) * math.cos(orient_rad) - (point[1]-centerY) * math.sin(orient_rad) + centerX
-        rotatedY = (point[0]-centerX) * math.sin(orient_rad) + (point[1]-centerY) * math.cos(orient_rad) + centerY
-        # move point 
+        orient_rad = -1*orientation * (math.pi / 180)
+        rotatedX = ((point[0]-centerX) * math.cos(orient_rad)
+                    - (point[1]-centerY) * math.sin(orient_rad)
+                    + centerX)
+        rotatedY = ((point[0]-centerX) * math.sin(orient_rad)
+                    + (point[1]-centerY) * math.cos(orient_rad)
+                    + centerY)
+        # move point
         return (int(rotatedX-deltaX), int(rotatedY-deltaY))
 
-    lines = [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
-
-    # Sort lines for reading order
-    #order = pseg.reading_order([l.bounds for l in lines_and_polygons])
-    #lsort = pseg.topsort(order)
-    #lines = [lines_and_polygons[i].bounds for i in lsort]
-    #lines = [(s2.start, s1.start, s2.stop, s1.stop) for s1, s2 in lines]
-    return lines
+    return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
 
-def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(1, 2), growth=(1.1,1.1), fail_save_iterations=100):
+def pagexmllineseg(xmlfile, imgpath,
+                   scale=None,
+                   vscale=1.0,
+                   hscale=1.0,
+                   max_blackseps=0,
+                   widen_blackseps=10,
+                   max_whiteseps=-1,
+                   minheight_whiteseps=10,
+                   minscale=12,
+                   maxlines=300,
+                   smear_strength=(1, 2),
+                   growth=(1.1, 1.1),
+                   fail_save_iterations=100,
+                   maxskew=2.0,
+                   skewsteps=8,
+                   usegauss=False,
+                   remove_images=False):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -288,7 +310,6 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
     for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
         cc = []
         for point in c.xpath("./ns:Point", namespaces=ns):
-            # coordstrings = [x.split(",") for x in c.attrib["points"].split()]
             cx = point.attrib["x"]
             cy = point.attrib["y"]
             c.remove(point)
@@ -311,18 +332,25 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
     s_print("[{}] Extract Textlines from TextRegions".format(name))
     im = Image.open(imgpath)
 
+    if remove_images:
+        # Draw white over ImageRegions
+        white = {
+            "1": 1, "L": 255, "P": 255,
+            "RGB": (255, 255, 255), "RGBA": (255, 255, 255, 255),
+            "CMYK": (0, 0, 0, 0), "YCbCr": (1, 0, 0),
+            "Lab": (100, 0, 0), "HSV": (0, 0, 100)
+        }[im.mode]
+        draw = ImageDraw.Draw(im)
+        for r in root.xpath('//ns:ImageRegion', namespaces=ns):
+            for c in r.xpath("./ns:Coords", namespaces=ns) + r.xpath("./Coords"):
+                coordstrings = [x.split(",") for x in c.attrib["points"].split()]
+                poly = [(int(x[0]), int(x[1])) for x in coordstrings]
+                draw.polygon(poly, fill=white)
+        del draw
+
     for n, c in enumerate(sorted(coordmap)):
-        if type(scale) == dict:
-            if coordmap[c]['type'] in scale:
-                rscale = scale[coordmap[c]['type']]
-            elif "other" in scale:
-                rscale = scale["other"]
-            else:
-                rscale = None
-        else:
-            rscale = scale
         coords = coordmap[c]['coords']
-        
+
         if len(coords) < 3:
             continue
         cropped, [minX, minY, maxX, maxY] = imgmanipulate.cutout(im, coords)
@@ -330,7 +358,10 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
         else:
-            orientation = -1*nlbin.estimate_skew(cropped)
+            orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
+                                                 skewsteps=skewsteps)
+            s_print(("[{}] Skew estimate between +/-{} in {} steps."
+                     " Estimated {}°").format(name, maxskew, skewsteps, orientation))
 
         if cropped is not None:
             colors = cropped.getcolors(2)
@@ -343,10 +374,18 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
                 lines = [1]
             else:
                 # if line in
-                lines = segment(cropped, scale=rscale, maxcolseps=maxcolseps,
+                lines = segment(cropped, scale=scale,
+                                max_blackseps=max_blackseps,
+                                widen_blackseps=widen_blackseps,
+                                max_whiteseps=max_whiteseps,
+                                minheight_whiteseps=minheight_whiteseps,
                                 smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
-                                fail_save_iterations=fail_save_iterations)
+                                fail_save_iterations=fail_save_iterations,
+                                vscale=vscale, hscale=hscale,
+                                minscale=minscale, maxlines=maxlines,
+                                usegauss=usegauss)
+
         else:
             lines = []
 
@@ -383,46 +422,220 @@ def pagexmllineseg(xmlfile, imgpath, scale=None, maxcolseps=-1, smear_strength=(
     return xmlstring, no_lines_segm
 
 
-def main():
+# Command line interface for the pagelineseg script
+def cli():
     parser = argparse.ArgumentParser("""
     Line segmentation with regions read from a PAGE xml file
     """)
-    parser.add_argument('DATASET',type=str,help='Path to the input dataset in json format with a list of image path, pagexml path and optional output path. (Will overwrite pagexml if no output path is given)') 
-    parser.add_argument('-s','--scale', type=float, default=None, help='Scale of the input image used for the line segmentation. Will be estimated if not defined.')
-    parser.add_argument('-p','--parallel', type=int, default=1, help='Number of threads parallely working on images. (default:%(default)s)')
-    parser.add_argument('-x','--smearX', type=float, default=2, help='Smearing strength in X direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
-    parser.add_argument('-y','--smearY', type=float, default=1, help='Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all contents. (default:%(default)s)')
-    parser.add_argument('--growthX', type=float, default=1.1, help='Growth in X direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
-    parser.add_argument('--growthY', type=float, default=1.1, help='Growth in Y direction for every iteration of the Textline polygon finding. Will speed up the algorithm at the cost of precision. (default: %(default)s)')
-    parser.add_argument('--maxcolseps', type=int, default=-1, help='Maximum # whitespace column separators, (default: %(default)s)')
-    parser.add_argument('--fail_save', type=int, default=1000, help='Fail save to counter infinite loops when combining contours to a precise textlines. Will connect remaining contours with lines. (default: %(default)s)')
+    # input
+    g_in = parser.add_argument_group('input')
+    g_in.add_argument('DATASET',
+                      type=str,
+                      help=('Path to the input dataset in json format with '
+                            'a list of image path, pagexml path and optional'
+                            ' output path. (Will overwrite pagexml if no '
+                            'output path is given)')
+                      )
+    g_in.add_argument('--remove_images',
+                      action='store_true',
+                      help=('Remove ImageRegions from the image before '
+                            'processing TextRegions for TextLines. Can be used'
+                            ' if ImageRegions overlap with TextRegions'
+                            'default: %(default)s')
+                      )
+
+    # limits
+    g_limit = parser.add_argument_group('limit parameters')
+    g_limit.add_argument('--minscale',
+                         type=float,
+                         default=12.0,
+                         help='minimum scale permitted, default: %(default)s'
+                         )
+    g_limit.add_argument('--maxlines',
+                         type=float,
+                         default=300,
+                         help='maximum # lines permitted, default: %(default)s'
+                         )
+
+    # line parameters
+    g_line = parser.add_argument_group('line parameters')
+    g_line.add_argument('--threshold',
+                        type=float,
+                        default=0.2,
+                        help='baseline threshold, default: %(default)s'
+                        )
+    g_line.add_argument('--usegauss',
+                        action='store_true',
+                        help=('use gaussian instead of uniform, '
+                              'default: %(default)s')
+                        )
+
+    # scale parameters
+    g_scale = parser.add_argument_group('scale parameters')
+    g_scale.add_argument('-s', '--scale',
+                         type=float,
+                         default=None,
+                         help=('Scale of the input image used for the line'
+                               'segmentation. Will be estimated if '
+                               'not defined, 0 or smaller.')
+                         )
+    g_scale.add_argument('--hscale',
+                         type=float,
+                         default=1.0,
+                         help=('Non-standard scaling of horizontal parameters.'
+                               ' (default: %(default)s)')
+                         )
+    g_scale.add_argument('--vscale',
+                         type=float,
+                         default=1.0,
+                         help=('non-standard scaling of vertical parameters. '
+                               '(default: %(default)s)')
+                         )
+    g_scale.add_argument('--filter_strength',
+                         type=float,
+                         default=1.0,
+                         help=('Strength individual characters are filtered out '
+                               'when creating a textline, default: %(default)s')
+                         )
+
+    # region skew estimate
+    g_skew = parser.add_argument_group('skew estimate parameters')
+    g_skew.add_argument('-m', '--maxskew',
+                        type=float,
+                        default=2.0,
+                        help=('Maximal estimated skew of an image.')
+                        )
+    g_skew.add_argument('--skewsteps',
+                        type=int,
+                        default=8,
+                        help=('Steps between 0 and +maxskew/-maxskew to '
+                              'estimate the possible skew of a region. Higher '
+                              'values will be more precise but will also take '
+                              'longer.')
+                        )
+
+    # line extraction
+    g_ext = parser.add_argument_group('extraction parameters')
+    g_ext.add_argument('-p', '--parallel',
+                       type=int,
+                       default=1,
+                       help=('Number of threads parallely working on images. '
+                             '(default:%(default)s)')
+                       )
+    g_ext.add_argument('-x', '--smearX',
+                       type=float,
+                       default=2,
+                       help=('Smearing strength in X direction for the '
+                             'algorithm calculating the textline polygon '
+                             'wrapping all contents. (default:%(default)s)')
+                       )
+    g_ext.add_argument('-y', '--smearY',
+                       type=float,
+                       default=1,
+                       help=('Smearing strength in Y direction for the '
+                             'algorithm calculating the textline polygon '
+                             'wrapping all contents. (default:%(default)s)')
+                       )
+    g_ext.add_argument('--growthX',
+                       type=float,
+                       default=1.1,
+                       help=('Growth in X direction for every iteration of '
+                             'the Textline polygon finding. Will speed up the '
+                             'algorithm at the cost of precision. '
+                             '(default: %(default)s)')
+                       )
+    g_ext.add_argument('--growthY',
+                       type=float,
+                       default=1.1,
+                       help=('Growth in Y direction for every iteration of '
+                             'the Textline polygon finding. Will speed up the '
+                             'algorithm at the cost of precision. '
+                             '(default: %(default)s)')
+                       )
+    g_ext.add_argument('--fail_save',
+                       type=int,
+                       default=1000,
+                       help=('Fail save to counter infinite loops when '
+                             'combining contours to a precise textlines. '
+                             'Will connect remaining contours with lines. '
+                             '(default: %(default)s)')
+                       )
+
+    # column parameters
+    g_colb = parser.add_argument_group('Black column parameters')
+    g_colb.add_argument('--max_blackseps','--maxseps',
+                        # --maxseps to be consistent with ocropy
+                        type=int,
+                        default=0,
+                        help=('Maximum # black column separators, '
+                              'default: %(default)s')
+                        )
+    g_colb.add_argument('--widen_blackseps','--sepwiden',
+                        # --sepwiden to be consistent with ocropy
+                        type=int,
+                        default=10,
+                        help=('Widen black separators (to account for warping),'
+                              ' default: %(default)s')
+                        )
+    g_colw = parser.add_argument_group('White column parameters')
+    g_colw.add_argument('--max_whiteseps','--maxcolseps',
+                        # --maxcolseps to be consistent with ocropy
+                        type=int,
+                        default=-1,
+                        help=('Maximum # whitespace column separators. '
+                              '(default: %(default)s)')
+                        )
+    g_colw.add_argument('--minheight_whiteseps', '--csminheight',
+                        # --csminheight to be consistent with ocropy
+                        type=float,
+                        default=10,
+                        help=('minimum column height (units=scale), '
+                              'default: %(default)s')
+                        )
                     
     args = parser.parse_args()
 
     with open(args.DATASET, 'r') as data_file:
         dataset = json.load(data_file)
 
-    # Parallel processes for the pagexmllineseg
+    # Parallel processes for the pagexmllineseg cli
     def parallel(data):
-        image,pagexml = data[:2]
-        pagexml_out = data[2] if (len(data) > 2 and data[2] is not None) else pagexml
+        if len(data) == 3:
+            image, pagexml, path_out = data
+        elif len(data) == 2:
+            image, pagexml = data
+            path_out = pagexml
+        else:
+            raise ValueError("Invalid data line with length {} "
+                             "instead of 2 or 3".format(len(data)))
 
-        xml_output, number_lines = pagexmllineseg(pagexml, image, 
-                                                    scale=args.scale,
-                                                    maxcolseps=args.maxcolseps, 
-                                                    smear_strength=(args.smearX, args.smearY), 
-                                                    growth=(args.growthX,args.growthY),
-                                                    fail_save_iterations=args.fail_save)
-        with open(pagexml_out, 'w+') as output_file:
-            s_print("Save annotations into '{}'".format(pagexml_out))
+        xml_output, _ = pagexmllineseg(pagexml, image,
+                                       scale=args.scale,
+                                       vscale=args.vscale,
+                                       hscale=args.hscale,
+                                       max_blackseps=args.max_blackseps,
+                                       widen_blackseps=args.widen_blackseps,
+                                       max_whiteseps=args.max_whiteseps,
+                                       minheight_whiteseps=args.minheight_whiteseps,
+                                       minscale=args.minscale,
+                                       maxlines=args.maxlines,
+                                       smear_strength=(args.smearX, args.smearY),
+                                       growth=(args.growthX, args.growthY),
+                                       fail_save_iterations=args.fail_save,
+                                       maxskew=args.maxskew,
+                                       skewsteps=args.skewsteps,
+                                       usegauss=args.usegauss,
+                                       remove_images=args.remove_images)
+        with open(path_out, 'w+') as output_file:
+            s_print("Save annotations into '{}'".format(path_out))
             output_file.write(xml_output)
     
     s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
 
     # Pool of all parallel processed pagexmllineseg
     with ThreadPool(processes=min(args.parallel, len(dataset))) as pool:
-        output = pool.map(parallel, dataset)
-    
+        pool.map(parallel, dataset)
+
 
 if __name__ == "__main__":
-    main()
+    cli()
