@@ -14,7 +14,7 @@ from ocr4all_helpers.lib import morph, sl
 # Computes column separators either from vertical black lines or whitespace.
 def compute_colseps(binary, scale,
                     max_blackseps, widen_blackseps,
-                    max_whiteseps, minheight_whiteseps, minaspect_whiteseps):
+                    max_whiteseps, minheight_whiteseps):
     colseps = compute_colseps_conv(binary, scale,
                                    minheight_whiteseps=minheight_whiteseps,
                                    max_whiteseps=max_whiteseps)
