@@ -292,6 +292,8 @@ def pagexmllineseg(xmlfile, imgpath,
                    smear_strength=(1, 2),
                    growth=(1.1, 1.1),
                    fail_save_iterations=100,
+                   maxskew=2.0,
+                   skewsteps=8,
                    usegauss=False):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
@@ -339,7 +341,8 @@ def pagexmllineseg(xmlfile, imgpath,
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
         else:
-            orientation = -1*nlbin.estimate_skew(cropped)
+            orientation = -1*nlbin.estimate_skew(cropped, maxskew=maxskew,
+                                                 skewsteps=skewsteps)
 
         if cropped is not None:
             colors = cropped.getcolors(2)
@@ -469,6 +472,22 @@ def cli():
                                'when creating a textline, default: %(default)s')
                          )
 
+    # region skew estimate
+    g_skew = parser.add_argument_group('skew estimate parameters')
+    g_skew.add_argument('-m', '--maxskew',
+                        type=float,
+                        default=2.0,
+                        help=('Maximal estimated skew of an image.')
+                        )
+    g_skew.add_argument('--skewsteps',
+                        type=int,
+                        default=8,
+                        help=('Steps between 0 and +maxskew/-maxskew to '
+                              'estimate the possible skew of a region. Higher '
+                              'values will be more precise but will also take '
+                              'longer.')
+                        )
+
     # line extraction
     g_ext = parser.add_argument_group('extraction parameters')
     g_ext.add_argument('-p', '--parallel',
@@ -577,6 +596,8 @@ def cli():
                                        smear_strength=(args.smearX, args.smearY),
                                        growth=(args.growthX, args.growthY),
                                        fail_save_iterations=args.fail_save,
+                                       maxskew=args.maxskew,
+                                       skewsteps=args.skewsteps,
                                        usegauss=args.usegauss)
         with open(path_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(path_out))

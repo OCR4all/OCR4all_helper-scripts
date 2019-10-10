@@ -20,7 +20,7 @@ def s_print(*a, **b):
         print(*a, **b)
 
 
-def pagexmlskewestimate(xmlfile, imgpath, from_scratch=False):
+def pagexmlskewestimate(xmlfile, imgpath, from_scratch=False, maxskew=2, skewsteps=8):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -49,7 +49,8 @@ def pagexmlskewestimate(xmlfile, imgpath, from_scratch=False):
         # Read orientation
         if len(coords) > 2 and ('orientation' not in region.attrib or from_scratch):
             cropped, _ = imgmanipulate.cutout(im, coords)
-            orientation = -1*nlbin.estimate_skew(cropped)
+            orientation = -1*nlbin.estimate_skew(cropped, maxskew=maxskew,
+                                                 skewsteps=skewsteps)
             region.set('orientation', str(orientation))
 
     s_print("[{}] Add all orientations in annotation file".format(name))
@@ -75,6 +76,18 @@ def cli():
                         help=('Overwrite existing orientation angles, by '
                               'calculating them from scratch.')
                         )
+    parser.add_argument('-m', '--maxskew',
+                        type=float,
+                        default=2.0,
+                        help=('Maximal skew of an image.')
+                        )
+    parser.add_argument('--skewsteps',
+                        type=int,
+                        default=8,
+                        help=('Steps between 0 and +maxskew/-maxskew to '
+                              'estimate a skew of a region. Higher values will'
+                              ' be more precise but will also take longer.')
+                        )
 
     args = parser.parse_args()
 
@@ -92,7 +105,8 @@ def cli():
             raise ValueError("Invalid data line with length {} "
                              "instead of 2 or 3".format(len(data)))
 
-        xml_output, _ = pagexmlskewestimate(pagexml, image, args.from_scratch)
+        xml_output, _ = pagexmlskewestimate(pagexml, image, args.from_scratch,
+                                            args.maxskew, args.skewsteps)
         with open(pagexml_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(pagexml_out))
             output_file.write(xml_output)
