@@ -488,23 +488,23 @@ def cli():
                        type=float,
                        default=1,
                        help=('Smearing strength in Y direction for the '
-                             'algorithm calculating the textline polygon'
-                             ' wrapping all contents. (default:%(default)s)')
+                             'algorithm calculating the textline polygon '
+                             'wrapping all contents. (default:%(default)s)')
                        )
     g_ext.add_argument('--growthX',
                        type=float,
                        default=1.1,
                        help=('Growth in X direction for every iteration of '
-                             'the Textline polygon finding. Will speed up the'
-                             ' algorithm at the cost of precision. '
+                             'the Textline polygon finding. Will speed up the '
+                             'algorithm at the cost of precision. '
                              '(default: %(default)s)')
                        )
     g_ext.add_argument('--growthY',
                        type=float,
                        default=1.1,
                        help=('Growth in Y direction for every iteration of '
-                             'the Textline polygon finding. Will speed up the'
-                             ' algorithm at the cost of precision. '
+                             'the Textline polygon finding. Will speed up the '
+                             'algorithm at the cost of precision. '
                              '(default: %(default)s)')
                        )
     g_ext.add_argument('--fail_save',
