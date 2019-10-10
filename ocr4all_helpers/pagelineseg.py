@@ -26,6 +26,7 @@ import json
 import argparse
 
 import os
+import sys
 
 # Add printing for every thread
 from threading import Lock
@@ -33,6 +34,7 @@ s_print_lock = Lock()
 def s_print(*a, **b):
     with s_print_lock:
         print(*a, **b)
+
 
 def s_print_error(*objs):
     s_print("ERROR: ", *objs, file=sys.stderr)
@@ -128,7 +130,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             width_median = sorted(widths)[int(len(widths) / 2)]
             height_median = sorted(heights)[int(len(heights) / 2)]
 
-            # Calculate x and y smear distance 
+            # Calculate x and y smear distance
             smear_distance_x = math.ceil(width_median*smear_strength[0] * (iteration*growth[0]))
             smear_distance_y = math.ceil(height_median*smear_strength[1] * (iteration*growth[1]))
 
@@ -162,7 +164,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             # Failsave if contours can't be smeared together after x iterations
             # Draw lines between the extreme points of each contour in order
             if iteration >= max_iterations and len(contours) > 1:
-                s_print("Start fail save, since precise line generation took too many iterations ({}).".format(iteration))
+                s_print(("Start fail save, since precise line generation took"
+                         " too many iterations ({}).").format(iteration))
                 extreme_points = []
                 for contour in contours:
                     sorted_x = sorted(contour, key=lambda c: c[0])
@@ -246,7 +249,7 @@ def segment(im, scale=None,
     segmentation = llabels*binary
 
     if np.amax(segmentation) > maxlines:
-        print_error("too many lines {}".format(np.amax(segmentation)))
+        s_print_error("too many lines {}".format(np.amax(segmentation)))
         return
 
     lines_and_polygons = compute_lines(segmentation,
@@ -444,7 +447,8 @@ def cli():
                          type=float,
                          default=None,
                          help=('Scale of the input image used for the line'
-                               'segmentation. Will be estimated if not defined.')
+                               'segmentation. Will be estimated if '
+                               'not defined, 0 or smaller.')
                          )
     g_scale.add_argument('--hscale',
                          type=float,
