@@ -49,7 +49,7 @@ def pagexmlskewestimate(xmlfile, imgpath, from_scratch=False, maxskew=2, skewste
         # Read orientation
         if len(coords) > 2 and ('orientation' not in region.attrib or from_scratch):
             cropped, _ = imgmanipulate.cutout(im, coords)
-            orientation = -1*nlbin.estimate_skew(cropped, maxskew=maxskew,
+            orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
                                                  skewsteps=skewsteps)
             region.set('orientation', str(orientation))
 

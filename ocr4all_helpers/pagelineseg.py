@@ -216,7 +216,7 @@ def segment(im, scale=None,
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
-    im_rotated = im.rotate(orientation, expand=True)
+    im_rotated = im.rotate(-1*orientation, expand=True)
 
     a = np.array(im_rotated.convert('L')) if im_rotated.mode == '1' else np.array(im_rotated)
 
@@ -266,7 +266,7 @@ def segment(im, scale=None,
 
     def translate_back(point):
         # rotate point around center
-        orient_rad = orientation * (math.pi / 180)
+        orient_rad = -1*orientation * (math.pi / 180)
         rotatedX = ((point[0]-centerX) * math.cos(orient_rad)
                     - (point[1]-centerY) * math.sin(orient_rad)
                     + centerX)
@@ -341,8 +341,10 @@ def pagexmllineseg(xmlfile, imgpath,
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
         else:
-            orientation = -1*nlbin.estimate_skew(cropped, maxskew=maxskew,
+            orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
                                                  skewsteps=skewsteps)
+            s_print(("[{}] Skew estimate between +/-{} in {} steps."
+                     " Estimated {}°").format(name, maxskew, skewsteps, orientation))
 
         if cropped is not None:
             colors = cropped.getcolors(2)
