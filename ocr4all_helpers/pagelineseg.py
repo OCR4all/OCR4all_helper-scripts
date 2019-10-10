@@ -17,7 +17,7 @@ from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
 
 from lxml import etree
-from PIL import Image
+from PIL import Image, ImageDraw
 from ocr4all_helpers.lib import imgmanipulate, morph, sl, pseg, nlbin
 
 from multiprocessing.pool import ThreadPool
@@ -294,7 +294,8 @@ def pagexmllineseg(xmlfile, imgpath,
                    fail_save_iterations=100,
                    maxskew=2.0,
                    skewsteps=8,
-                   usegauss=False):
+                   usegauss=False,
+                   remove_images=False):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
@@ -330,6 +331,22 @@ def pagexmllineseg(xmlfile, imgpath,
 
     s_print("[{}] Extract Textlines from TextRegions".format(name))
     im = Image.open(imgpath)
+
+    if remove_images:
+        # Draw white over ImageRegions
+        white = {
+            "1": 1, "L": 255, "P": 255,
+            "RGB": (255, 255, 255), "RGBA": (255, 255, 255, 255),
+            "CMYK": (0, 0, 0, 0), "YCbCr": (1, 0, 0),
+            "Lab": (100, 0, 0), "HSV": (0, 0, 100)
+        }[im.mode]
+        draw = ImageDraw.Draw(im)
+        for r in root.xpath('//ns:ImageRegion', namespaces=ns):
+            for c in r.xpath("./ns:Coords", namespaces=ns) + r.xpath("./Coords"):
+                coordstrings = [x.split(",") for x in c.attrib["points"].split()]
+                poly = [(int(x[0]), int(x[1])) for x in coordstrings]
+                draw.polygon(poly, fill=white)
+        del draw
 
     for n, c in enumerate(sorted(coordmap)):
         coords = coordmap[c]['coords']
@@ -419,7 +436,14 @@ def cli():
                             ' output path. (Will overwrite pagexml if no '
                             'output path is given)')
                       )
- 
+    g_in.add_argument('--remove_images',
+                      action='store_true',
+                      help=('Remove ImageRegions from the image before '
+                            'processing TextRegions for TextLines. Can be used'
+                            ' if ImageRegions overlap with TextRegions'
+                            'default: %(default)s')
+                      )
+
     # limits
     g_limit = parser.add_argument_group('limit parameters')
     g_limit.add_argument('--minscale',
@@ -600,7 +624,8 @@ def cli():
                                        fail_save_iterations=args.fail_save,
                                        maxskew=args.maxskew,
                                        skewsteps=args.skewsteps,
-                                       usegauss=args.usegauss)
+                                       usegauss=args.usegauss,
+                                       remove_images=args.remove_images)
         with open(path_out, 'w+') as output_file:
             s_print("Save annotations into '{}'".format(path_out))
             output_file.write(xml_output)
