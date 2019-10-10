@@ -284,6 +284,8 @@ def pagexmllineseg(xmlfile, imgpath,
                    widen_blackseps=10,
                    max_whiteseps=-1,
                    minheight_whiteseps=10,
+                   minscale=12,
+                   maxlines=300,
                    smear_strength=(1, 2),
                    growth=(1.1, 1.1),
                    fail_save_iterations=100,
@@ -513,34 +515,34 @@ def cli():
     # column parameters
     g_colb = parser.add_argument_group('Black column parameters')
     g_colb.add_argument('--max_blackseps','--maxseps',
-                       #--maxseps to be consistent with ocropy
-                       type=int,
-                       default=0,
-                       help=('Maximum # black column separators, '
-                             'default: %(default)s')
-                       )
+                        # --maxseps to be consistent with ocropy
+                        type=int,
+                        default=0,
+                        help=('Maximum # black column separators, '
+                              'default: %(default)s')
+                        )
     g_colb.add_argument('--widen_blackseps','--sepwiden',
-                       #--sepwiden to be consistent with ocropy
-                       type=int,
-                       default=10,
-                       help=('Widen black separators (to account for warping),'
-                             ' default: %(default)s')
-                       )
+                        # --sepwiden to be consistent with ocropy
+                        type=int,
+                        default=10,
+                        help=('Widen black separators (to account for warping),'
+                              ' default: %(default)s')
+                        )
     g_colw = parser.add_argument_group('White column parameters')
     g_colw.add_argument('--max_whiteseps','--maxcolseps',
-                       #--maxcolseps to be consistent with ocropy
-                       type=int,
-                       default=-1,
-                       help=('Maximum # whitespace column separators. '
-                             '(default: %(default)s)')
-                       )
+                        # --maxcolseps to be consistent with ocropy
+                        type=int,
+                        default=-1,
+                        help=('Maximum # whitespace column separators. '
+                              '(default: %(default)s)')
+                        )
     g_colw.add_argument('--minheight_whiteseps', '--csminheight',
-                       #--csminheight to be consistent with ocropy
-                       type=float,
-                       default=10,
-                       help=('minimum column height (units=scale), '
-                             'default: %(default)s')
-                       )
+                        # --csminheight to be consistent with ocropy
+                        type=float,
+                        default=10,
+                        help=('minimum column height (units=scale), '
+                              'default: %(default)s')
+                        )
                     
     args = parser.parse_args()
 
@@ -566,6 +568,8 @@ def cli():
                                        widen_blackseps=args.widen_blackseps,
                                        max_whiteseps=args.max_whiteseps,
                                        minheight_whiteseps=args.minheight_whiteseps,
+                                       minscale=args.minscale,
+                                       maxlines=args.maxlines,
                                        smear_strength=(args.smearX, args.smearY),
                                        growth=(args.growthX, args.growthY),
                                        fail_save_iterations=args.fail_save,
