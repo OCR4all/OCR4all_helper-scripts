@@ -59,12 +59,12 @@ def compute_colseps_conv(binary, scale=1.0, minheight_whiteseps=10, max_whitesep
 
 
 # Finds vertical black lines corresponding to column separators.
-def compute_separators_morph(binary, scale, max_blackseps=0, sepwiden=10):
+def compute_separators_morph(binary, scale, max_blackseps=0, widen_blackseps=10):
     d0 = int(max(5, scale/4))
-    d1 = int(max(5, scale))+sepwiden
+    d1 = int(max(5, scale))+widen_blackseps
     thick = morph.r_dilation(binary, (d0, d1))
     vert = morph.rb_opening(thick, (10*scale, 1))
-    vert = morph.r_erosion(vert, (d0//2, sepwiden))
+    vert = morph.r_erosion(vert, (d0//2, widen_blackseps))
     vert = morph.select_regions(vert, sl.dim1, min=3, nbest=2*max_blackseps)
     vert = morph.select_regions(vert, sl.dim0, min=20*scale, nbest=max_blackseps)
     return vert
