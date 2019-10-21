@@ -225,7 +225,6 @@ def segment(im, scale=None,
 
     if not scale:
         scale = pseg.estimate_scale(binary)
-    s_print(scale, binary.shape, np.min(binary), np.max(binary))
     if scale < minscale:
         s_print_error("scale ({}) less than --minscale; skipping".format(scale))
         return
@@ -367,7 +366,7 @@ def pagexmllineseg(xmlfile, imgpath,
         if cropped is not None:
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
-                cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)))
+                cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)).astype(np.uint8))
             if coordmap[c]["type"] == "drop-capital":
                 lines = [1]
             else:
@@ -592,7 +591,6 @@ def cli():
                         )
                     
     args = parser.parse_args()
-    s_print(args)
 
     with open(args.DATASET, 'r') as data_file:
         dataset = json.load(data_file)

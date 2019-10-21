@@ -58,9 +58,9 @@ def adaptive_binarize(image, threshold=0.5, zoom=0.5, perc=80, range=20):
     flat -= lo
     flat /= (hi-lo)
     flat = np.clip(flat, 0, 1)
-    bin = 1*(flat>threshold)
+    binary = 1*(flat>threshold)
     del flat
-    return bin.astype(bool)
+    return binary
 
 def estimate_thresholds(flat, bignore=0.1, escale=1.0, lo=5, hi=90):
     '''# estimate low and high thresholds
