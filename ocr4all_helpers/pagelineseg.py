@@ -366,10 +366,7 @@ def pagexmllineseg(xmlfile, imgpath,
         if cropped is not None:
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
-                try:
-                    cropped = nlbin.adaptive_binarize(cropped)
-                except SystemError:
-                    continue
+                cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)).astype(np.uint8))
             if coordmap[c]["type"] == "drop-capital":
                 lines = [1]
             else:
