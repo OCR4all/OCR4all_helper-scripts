@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(name='ocr4all_helpers',
-      version='0.2d1',
+      version='0.2.2',
       description='Different python scripts used in the OCR4all workflow.',
       url='https://github.com/OCR4all/OCR4all_helper-scripts',
       author='Nico Balbach',

@@ -11,6 +11,7 @@
 #   https://github.com/mittagessen/kraken
 
 import numpy as np
+from skimage import io
 from skimage.measure import find_contours, approximate_polygon
 from skimage.draw import line_aa
 from scipy.ndimage.filters import gaussian_filter, uniform_filter
@@ -330,7 +331,7 @@ def pagexmllineseg(xmlfile, imgpath,
             coordmap[rid]["orientation"] = float(r.attrib["orientation"])
 
     s_print("[{}] Extract Textlines from TextRegions".format(name))
-    im = Image.open(imgpath)
+    im = Image.fromarray(io.imread(imgpath, as_gray=True))
 
     if remove_images:
         # Draw white over ImageRegions
@@ -366,10 +367,8 @@ def pagexmllineseg(xmlfile, imgpath,
         if cropped is not None:
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
-                try:
-                    cropped = nlbin.adaptive_binarize(cropped)
-                except SystemError:
-                    continue
+                cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)).astype(bool))
+
             if coordmap[c]["type"] == "drop-capital":
                 lines = [1]
             else:
