@@ -89,6 +89,13 @@ def cli():
                               ' be more precise but will also take longer.')
                         )
 
+    parser.add_argument('-p', '--parallel',
+                        type=int,
+                        default=1,
+                        help=('Number of threads parallely working on images. '
+                              '(default:%(default)s)')
+                        )
+
     args = parser.parse_args()
 
     with open(args.DATASET, 'r') as data_file:
