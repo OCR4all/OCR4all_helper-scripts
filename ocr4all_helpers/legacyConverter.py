@@ -6,10 +6,21 @@ from lxml import etree
 
 
 def get_namespace(tree: etree.Element) -> Dict[str, str]:
+    """Automatically extracts Page XML namespace
+
+    :param tree: Base Page XML file representing the page.
+    :return: Namespace dictionary.
+    """
     return {"p": tree.nsmap[None]}
 
 
 def convert_page(xml: Path) -> etree.Element:
+    """Converts a page in a legacy OCR4all project to latest by getting and processing the information in the affiliated
+    directories and writing them into the pages Page XML file.
+
+    :param xml: Base Page XML file representing the page.
+    :return: XML tree enriched with all necessary information from the legacy directories.
+    """
     tree = etree.parse(str(xml)).getroot()
     ns = get_namespace(tree)
     page_dir = Path(xml.parent, xml.stem)
@@ -66,6 +77,11 @@ def convert_page(xml: Path) -> etree.Element:
 
 
 def get_regions_data(path: Path) -> List[dict]:
+    """Gets base data for a region in a page.
+
+    :param path: Path to the region directory.
+    :return: List of dictionaries holding base region data.
+    """
     regions = list()
 
     for region in sorted(path.glob("./*.offset")):
@@ -82,6 +98,12 @@ def get_regions_data(path: Path) -> List[dict]:
 
 
 def process_lines(path: Path, offset: Tuple[int, int]) -> Tuple[list, list, list, list, list]:
+    """Collects image and text information about each line in region.
+
+    :param path: Path to the region directory.
+    :param offset: Region offset for calculating actual coordinates of the lines.
+    :return: Information about line coordinates, prediction and ground truth text and binary and greyscale images.
+    """
     line_coords = []
     prediction = []
     gt = []
@@ -116,11 +138,22 @@ def process_lines(path: Path, offset: Tuple[int, int]) -> Tuple[list, list, list
 
 
 def calc_bbox(region: dict, linenumber: int) -> str:
+    """Calculates bounding from line coordinate files.
+
+    :param region: Region data dictionary.
+    :param linenumber: Number of the line for which the bounding box shall be calculated.
+    :return: String representation of the bounding box.
+    """
     coords = region["line_coords"][linenumber]
     return f"{coords[1]},{coords[2]} {coords[1]},{coords[0]} {coords[3]},{coords[0]} {coords[3]},{coords[2]}"
 
 
 def write_xml(file: Path, tree: etree.Element):
+    """Writes the enriched XML tree to file.
+
+    :param file: Output file.
+    :param tree: Enriched XML tree.
+    """
     with file.open("w") as outfile:
         outfile.write(etree.tostring(tree, encoding="unicode"))
 
