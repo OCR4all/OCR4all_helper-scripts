@@ -90,7 +90,7 @@ def get_regions_data(path: Path) -> List[dict]:
         with region.open("r") as file:
             (x, y) = file.read().split(",")
             region_dict["name"] = str(region.stem)
-            region_dict["offset"] = (int(x), int(y))
+            region_dict["offset"] = (abs(int(x)), abs(int(y)))
 
         regions.append(region_dict)
 
