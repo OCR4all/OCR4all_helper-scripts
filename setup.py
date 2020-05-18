@@ -12,7 +12,8 @@ setup(name='ocr4all_helpers',
             'console_scripts': [
                   'pagelineseg=ocr4all_helpers.pagelineseg:cli',
                   'skewestimate=ocr4all_helpers.skewestimate:cli',
-                  'pagedir2pagexml=ocr4all_helpers.pagedir2pagexml:main'
+                  'pagedir2pagexml=ocr4all_helpers.pagedir2pagexml:main',
+                  'legacy_convert=ocr4all_helpers.legacyconvert:main'
             ],
       },
       install_requires=open("requirements.txt").read().split(),
