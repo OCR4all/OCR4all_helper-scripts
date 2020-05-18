@@ -145,7 +145,7 @@ def calc_bbox(region: dict, linenumber: int) -> str:
     :return: String representation of the bounding box.
     """
     coords = region["line_coords"][linenumber]
-    print(coords)
+
     return f"{coords[1]},{coords[2]} {coords[1]},{coords[0]} {coords[3]},{coords[0]} {coords[3]},{coords[2]}"
 
 
