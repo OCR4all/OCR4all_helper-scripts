@@ -90,7 +90,7 @@ def get_regions_data(path: Path) -> List[dict]:
         with region.open("r") as file:
             (x, y) = file.read().split(",")
             region_dict["name"] = str(region.stem)
-            region_dict["offset"] = (abs(int(x)), abs(int(y)))
+            region_dict["offset"] = (int(x), int(y))
 
         regions.append(region_dict)
 
@@ -119,8 +119,8 @@ def process_lines(path: Path, offset: Tuple[int, int]) -> Tuple[list, list, list
 
         with line_coord.open("r") as coord_file:
             (y_min, x_min, y_max, x_max) = coord_file.read().split(",")
-            line_coords.append((int(y_min) + offset[1], int(x_min) + offset[0], int(y_max) + offset[1],
-                                int(x_max) + offset[0]))
+            line_coords.append([max(0, int(y_min) + offset[1]), max(0, int(x_min) + offset[0]),
+                                max(0, int(y_max) + offset[1]), max(0, int(x_max) + offset[0])])
 
         if prediction_file.is_file():
             with prediction_file.open("r") as pred_file:
@@ -145,6 +145,7 @@ def calc_bbox(region: dict, linenumber: int) -> str:
     :return: String representation of the bounding box.
     """
     coords = region["line_coords"][linenumber]
+    print(coords)
     return f"{coords[1]},{coords[2]} {coords[1]},{coords[0]} {coords[3]},{coords[0]} {coords[3]},{coords[2]}"
 
 
