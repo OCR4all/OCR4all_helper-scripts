@@ -319,7 +319,7 @@ def pagexmllineseg(xmlfile, imgpath,
     coordmap = {}
     for r in root.xpath('//ns:TextRegion', namespaces=ns):
         rid = r.attrib["id"]
-        coordmap[rid] = {"type": r.attrib["type"]}
+        coordmap[rid] = {"type": r.attrib.get("type", "TextRegion")}
         coordmap[rid]["coords"] = []
         for c in r.xpath("./ns:Coords", namespaces=ns) + r.xpath("./Coords"):
             coordmap[rid]["coordstring"] = c.attrib["points"]
