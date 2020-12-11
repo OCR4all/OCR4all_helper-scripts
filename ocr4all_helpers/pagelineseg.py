@@ -31,6 +31,8 @@ import sys
 # Add printing for every thread
 from threading import Lock
 s_print_lock = Lock()
+
+
 def s_print(*a, **b):
     with s_print_lock:
         print(*a, **b)
@@ -86,19 +88,17 @@ def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
     cleaned = boxmap*binary
     if usegauss:
         # this uses Gaussians
-        grad = gaussian_filter(1.0*cleaned, (vscale*0.3*scale,
-                                            hscale*6*scale), order=(1, 0))
+        grad = gaussian_filter(1.0*cleaned, (vscale*0.3*scale, hscale*6*scale), order=(1, 0))
     else:
         # this uses non-Gaussian oriented filters
-        grad = gaussian_filter(1.0*cleaned, (max(4, vscale*0.3*scale),
-                                            hscale*scale), order=(1, 0))
-        grad = uniform_filter(grad, (vscale,hscale*6*scale))
+        grad = gaussian_filter(1.0*cleaned, (max(4, vscale*0.3*scale), hscale*scale), order=(1, 0))
+        grad = uniform_filter(grad, (vscale, hscale*6*scale))
 
     def norm_max(a):
         return a/np.amax(a)
 
     bottom = norm_max((grad<0)*(-grad))
-    top = norm_max((grad>0)*grad)
+    top = norm_max((grad > 0)*grad)
     return bottom, top, boxmap
 
 
@@ -149,7 +149,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
                             work_image[y-gap_current_y:y, x] = True
                         
                         if gap_current_x < smear_distance_x and gap_current_x > 0:
-                            #Draw over
+                            # Draw over
                             work_image[y, x-gap_current_x:x] = True
 
                         gap_current_y = 0
@@ -274,7 +274,7 @@ def segment(im, scale=None,
                     + (point[1]-centerY) * math.cos(orient_rad)
                     + centerY)
         # move point
-        return (int(rotatedX-deltaX), int(rotatedY-deltaY))
+        return int(rotatedX-deltaX), int(rotatedY-deltaY)
 
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
@@ -388,7 +388,7 @@ def pagexmllineseg(xmlfile, imgpath,
 
 
         # Iterpret whole region as textline if no textline are found
-        if not(lines) or len(lines) == 0:
+        if not lines or len(lines) == 0:
             coordstrg = " ".join([str(x)+","+str(y) for x, y in coords])
             textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
             if orientation:
@@ -500,7 +500,7 @@ def cli():
     g_skew.add_argument('-m', '--maxskew',
                         type=float,
                         default=2.0,
-                        help=('Maximal estimated skew of an image.')
+                        help='Maximal estimated skew of an image.'
                         )
     g_skew.add_argument('--skewsteps',
                         type=int,
@@ -560,14 +560,14 @@ def cli():
 
     # column parameters
     g_colb = parser.add_argument_group('Black column parameters')
-    g_colb.add_argument('--max_blackseps','--maxseps',
+    g_colb.add_argument('--max_blackseps', '--maxseps',
                         # --maxseps to be consistent with ocropy
                         type=int,
                         default=0,
                         help=('Maximum # black column separators, '
                               'default: %(default)s')
                         )
-    g_colb.add_argument('--widen_blackseps','--sepwiden',
+    g_colb.add_argument('--widen_blackseps', '--sepwiden',
                         # --sepwiden to be consistent with ocropy
                         type=int,
                         default=10,
@@ -575,7 +575,7 @@ def cli():
                               ' default: %(default)s')
                         )
     g_colw = parser.add_argument_group('White column parameters')
-    g_colw.add_argument('--max_whiteseps','--maxcolseps',
+    g_colw.add_argument('--max_whiteseps', '--maxcolseps',
                         # --maxcolseps to be consistent with ocropy
                         type=int,
                         default=-1,

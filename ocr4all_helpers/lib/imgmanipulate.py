@@ -12,7 +12,7 @@ def cutout(im, coords):
     ImageDraw.Draw(maskim).polygon(coords, outline=1, fill=1)
     new = Image.new(im.mode, im.size, "white")
     masked = Image.composite(im, new, maskim)
-    rectangle = [min([p[0] for p in coords]), min([p[1] for p in coords]),
-            max([p[0] for p in coords]), max([p[1] for p in coords])]
+    rectangle = [min([p[0] for p in coords]), min([p[1] for p in coords]), max([p[0] for p in coords]),
+                 max([p[1] for p in coords])]
     cropped = masked.crop(rectangle)
     return cropped, rectangle

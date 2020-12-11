@@ -15,6 +15,8 @@ import os
 # Add printing for every thread
 from threading import Lock
 s_print_lock = Lock()
+
+
 def s_print(*a, **b):
     with s_print_lock:
         print(*a, **b)
@@ -79,7 +81,7 @@ def cli():
     parser.add_argument('-m', '--maxskew',
                         type=float,
                         default=2.0,
-                        help=('Maximal skew of an image.')
+                        help='Maximal skew of an image.'
                         )
     parser.add_argument('--skewsteps',
                         type=int,

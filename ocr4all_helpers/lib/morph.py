@@ -37,11 +37,11 @@ def r_erosion(image, size, origin=0):
     return filters.minimum_filter(image, size, origin=origin)
 
 
-def rb_dilation(image,size,origin=0):
+def rb_dilation(image, size, origin=0):
     """Binary dilation using linear filters."""
     output = zeros(image.shape, 'f')
     filters.uniform_filter(image, size, output=output, origin=origin, mode='constant', cval=0)
-    return array(output>0, 'i')
+    return array(output > 0, 'i')
 
 
 def rb_erosion(image, size, origin=0):
@@ -62,12 +62,16 @@ def find_objects(image, **kw):
     work with a wider range of data types.  The default function
     is inconsistent about the data types it accepts on different
     platforms."""
-    try: return measurements.find_objects(image, **kw)
-    except: pass
+    try:
+        return measurements.find_objects(image, **kw)
+    except:
+        pass
     types = ["int32", "uint32", "int64", "uint64", "int16", "uint16"]
     for t in types:
-        try: return measurements.find_objects(array(image, dtype=t), **kw)
-        except: pass
+        try:
+            return measurements.find_objects(array(image, dtype=t), **kw)
+        except:
+            pass
     # let it raise the same exception as before
     return measurements.find_objects(image, **kw)
 
@@ -77,12 +81,16 @@ def label(image, **kw):
     work with a wider range of data types.  The default function
     is inconsistent about the data types it accepts on different
     platforms."""
-    try: return measurements.label(image, **kw)
-    except: pass
+    try:
+        return measurements.label(image, **kw)
+    except:
+        pass
     types = ["int32", "uint32", "int64", "uint64", "int16", "uint16"]
     for t in types:
-        try: return measurements.label(array(image, dtype=t), **kw)
-        except: pass
+        try:
+            return measurements.label(array(image, dtype=t), **kw)
+        except:
+            pass
     # let it raise the same exception as before
     return measurements.label(image, **kw)
 
@@ -96,8 +104,10 @@ def propagate_labels(image, labels, conflict=0):
     outputs = zeros(amax(rlabels)+1, 'i')
     oops = -(1 << 30)
     for o, i in cors.T:
-        if outputs[o] != 0: outputs[o] = oops
-        else: outputs[o] = i
+        if outputs[o] != 0:
+            outputs[o] = oops
+        else:
+            outputs[o] = i
     outputs[outputs == oops] = conflict
     outputs[0] = 0
     return outputs[rlabels]
@@ -117,7 +127,7 @@ def correspondences(labels1, labels2):
 
 def spread_labels(labels, maxdist=9999999):
     """Spread the given labels to the background"""
-    distances, features = morphology.distance_transform_edt(labels==0, return_distances=1, return_indices=1)
+    distances, features = morphology.distance_transform_edt(labels == 0, return_distances=1, return_indices=1)
     indexes = features[0]*labels.shape[1]+features[1]
     spread = labels.ravel()[indexes.ravel()].reshape(*labels.shape)
     spread *= (distances < maxdist)
