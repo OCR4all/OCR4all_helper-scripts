@@ -411,7 +411,7 @@ def pagexmllineseg(xmlfile, imgpath,
                                            attrib={"id": "{}_l{:03d}".format(c, n+1)})
                 etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
-    s_print("[{}] Generate new PAGE xml with textlines".format(name))
+    s_print("[{}] Generate new PAGE XML with text lines".format(name))
     xmlstring = etree.tounicode(root.getroottree()).replace(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2010-03-19",
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
