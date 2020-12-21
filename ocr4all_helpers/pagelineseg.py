@@ -212,7 +212,7 @@ def segment(im, scale=None,
     """
 
     colors = im.getcolors(2)
-    if im.mode != '1' and not (colors is not None and len(colors) == 2):
+    if (im.mode not in ['1', "L"]) and not (colors is not None and len(colors) == 2):
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
