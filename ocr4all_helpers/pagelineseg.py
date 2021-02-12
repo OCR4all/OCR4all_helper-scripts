@@ -15,7 +15,7 @@ from skimage.measure import find_contours, approximate_polygon
 from skimage.draw import line_aa
 from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
-from typing import Tuple
+from typing import List, Tuple, Union
 
 from lxml import etree
 from PIL import Image, ImageDraw
@@ -48,8 +48,8 @@ class Record(object):
         self.__dict__.update(kwargs)
 
 
-def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[int, int], scale: int, growth: Tuple[int, int],
-                  max_iterations: int, filter_strength: float = 1.0):
+def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[int, int], scale: int, growth: Tuple[float, float],
+                  max_iterations: int, filter_strength: float = 1.0) -> List[Record]:
     """Given a line segmentation map, computes a list of tuples consisting of 2D slices and masked images.
 
     Implementation derived from ocropy with changes to allow extracting the line coords/polygons
@@ -83,7 +83,8 @@ def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[int, int], sca
     return lines
 
 
-def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale: float = 1.0, usegauss: bool = False):
+def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale: float = 1.0,
+                     usegauss: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Uses gradient filtering to find baselines
     """
@@ -105,7 +106,7 @@ def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale
     return bottom, top, boxmap
 
 
-def boundary(contour: np.ndarray):
+def boundary(contour: np.ndarray) -> List[np.float64]:
     x_min = np.min(contour[:, 0])
     x_max = np.max(contour[:, 0])
     y_min = np.min(contour[:, 1])
@@ -115,7 +116,8 @@ def boundary(contour: np.ndarray):
 
 
 def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[int, int] = (1, 2),
-                              growth: Tuple[float, float] = (1.1, 1.1), max_iterations: int = 1000):
+                              growth: Tuple[float, float] = (1.1, 1.1),
+                              max_iterations: int = 1000) -> List[Tuple[np.float64, np.float64]]:
     """
     Approximates a single polygon around high pixels in a mask, via smearing
     """
@@ -210,7 +212,7 @@ def segment(im: Image, scale: float = None,
             smear_strength: Tuple[int, int] = (1, 2), growth: Tuple[float, float] = (1.1, 1.1), orientation: int = 0,
             fail_save_iterations: int = 1000, vscale: float = 1.0, hscale: float = 1.0,
             minscale: float = 12.0, maxlines: int = 300,
-            threshold: float = 0.2, usegauss: bool = False):
+            threshold: float = 0.2, usegauss: bool = False) -> Union[None, List[List[Tuple[int, int]]]]:
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -300,7 +302,7 @@ def pagexmllineseg(xmlfile, imgpath,
                    maxskew=2.0,
                    skewsteps=8,
                    usegauss=False,
-                   remove_images=False):
+                   remove_images=False) -> Tuple[str, int]:
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print(f"""Start process for '{name}'
         |- Image: '{imgpath}'
