@@ -33,9 +33,9 @@ from threading import Lock
 s_print_lock = Lock()
 
 
-def s_print(*a, **b):
+def s_print(*args, **kwargs):
     with s_print_lock:
-        print(*a, **b)
+        print(*args, **kwargs)
 
 
 def s_print_error(*objs):
@@ -102,13 +102,13 @@ def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
     return bottom, top, boxmap
 
 
-def boundary(contour):
-    Xmin = np.min(contour[:, 0])
-    Xmax = np.max(contour[:, 0])
-    Ymin = np.min(contour[:, 1])
-    Ymax = np.max(contour[:, 1])
+def boundary(contour: np.ndarray):
+    x_min = np.min(contour[:, 0])
+    x_max = np.max(contour[:, 0])
+    y_min = np.min(contour[:, 1])
+    y_max = np.max(contour[:, 1])
 
-    return [Xmin, Xmax, Ymin, Ymax]
+    return [x_min, x_max, y_min, y_max]
 
 
 # Approximate a single polygon around high pixels in a mask, via smearing
