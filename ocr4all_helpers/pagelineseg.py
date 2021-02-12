@@ -55,26 +55,26 @@ class Record(object):
 def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength=1.0):
     lobjects = morph.find_objects(segmentation)
     lines = []
-    for i, o in enumerate(lobjects):
-        if o is None:
+    for idx, obj in enumerate(lobjects):
+        if obj is None:
             continue
-        if sl.dim1(o) < 2*scale*filter_strength or sl.dim0(o) < scale*filter_strength:
+        if sl.dim1(obj) < 2*scale*filter_strength or sl.dim0(obj) < scale*filter_strength:
             continue
-        mask = (segmentation[o] == i+1)
+        mask = (segmentation[obj] == idx+1)
         if np.amax(mask) == 0:
             continue
 
         result = Record()
-        result.label = i+1
-        result.bounds = o
+        result.label = idx+1
+        result.bounds = obj
         polygon = []
-        if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
+        if ((segmentation[obj] != 0) == (segmentation[obj] != idx+1)).any():
             ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
             ppoints = ppoints[1:] if ppoints else []
-            polygon = [(o[1].start+x, o[0].start+y) for x, y in ppoints]
+            polygon = [(obj[1].start+x, obj[0].start+y) for x, y in ppoints]
         if not polygon:
-            polygon = [(o[1].start, o[0].start), (o[1].stop,  o[0].start),
-                       (o[1].stop,  o[0].stop),  (o[1].start, o[0].stop)]
+            polygon = [(obj[1].start, obj[0].start), (obj[1].stop,  obj[0].start),
+                       (obj[1].stop,  obj[0].stop),  (obj[1].start, obj[0].stop)]
         result.polygon = polygon
         result.mask = mask
         lines.append(result)
