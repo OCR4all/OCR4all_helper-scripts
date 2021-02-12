@@ -329,7 +329,7 @@ def pagexmllineseg(xmlfile, imgpath,
         if 'orientation' in r.attrib:
             coordmap[rid]["orientation"] = float(r.attrib["orientation"])
 
-    s_print(f"[{format}] Extract Textlines from TextRegions")
+    s_print(f"[{name}] Extract Textlines from TextRegions")
     im = Image.open(imgpath)
 
     if remove_images:
@@ -360,8 +360,7 @@ def pagexmllineseg(xmlfile, imgpath,
         else:
             orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
                                                  skewsteps=skewsteps)
-            s_print((f"[{name}] Skew estimate between +/-{maxskew} in {skewsteps} steps."
-                     " Estimated {orientation}°"))
+            s_print(f"[{name}] Skew estimate between +/-{maxskew} in {skewsteps} steps. Estimated {orientation}°")
 
         if cropped is not None:
             colors = cropped.getcolors(2)
