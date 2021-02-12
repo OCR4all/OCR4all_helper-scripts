@@ -131,8 +131,8 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[int, 
         while len(contours) > 1:
             # Get bounds with dimensions
             bounds = [boundary(contour) for contour in contours]
-            widths = [b[1]-b[0] for b in bounds]
-            heights = [b[3]-b[2] for b in bounds]
+            widths = [bound[1]-bound[0] for bound in bounds]
+            heights = [bound[3]-bound[2] for bound in bounds]
 
             # Calculate x and y median distances (or at least 1)
             width_median = sorted(widths)[int(len(widths) / 2)]
@@ -172,8 +172,7 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[int, 
             # Failsave if contours can't be smeared together after x iterations
             # Draw lines between the extreme points of each contour in order
             if iteration >= max_iterations and len(contours) > 1:
-                s_print((f"Start fail save, since precise line generation took"
-                         " too many iterations ({iteration})."))
+                s_print((f"Start fail save, since precise line generation took too many iterations ({iteration})."))
                 extreme_points = []
                 for contour in contours:
                     sorted_x = sorted(contour, key=lambda c: c[0])
@@ -266,22 +265,18 @@ def segment(im: Image, scale: float = None,
                                        fail_save_iterations)
 
     # Translate each point back to original
-    deltaX = (im_rotated.width - im.width) / 2
-    deltaY = (im_rotated.height - im.height) / 2
-    centerX = im_rotated.width / 2
-    centerY = im_rotated.height / 2
+    delta_x = (im_rotated.width - im.width) / 2
+    delta_y = (im_rotated.height - im.height) / 2
+    center_x = im_rotated.width / 2
+    center_y = im_rotated.height / 2
 
     def translate_back(point):
         # rotate point around center
         orient_rad = -1*orientation * (math.pi / 180)
-        rotatedX = ((point[0]-centerX) * math.cos(orient_rad)
-                    - (point[1]-centerY) * math.sin(orient_rad)
-                    + centerX)
-        rotatedY = ((point[0]-centerX) * math.sin(orient_rad)
-                    + (point[1]-centerY) * math.cos(orient_rad)
-                    + centerY)
+        rotated_x = ((point[0]-center_x) * math.cos(orient_rad) - (point[1]-center_y) * math.sin(orient_rad) + center_x)
+        rotated_y = ((point[0]-center_x) * math.sin(orient_rad) + (point[1]-center_y) * math.cos(orient_rad) + center_y)
         # move point
-        return int(rotatedX-deltaX), int(rotatedY-deltaY)
+        return int(rotated_x-delta_x), int(rotated_y-delta_y)
 
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
@@ -314,27 +309,27 @@ def pagexmllineseg(xmlfile, imgpath,
     s_print(f"[{name}] Retrieve TextRegions")
 
     # convert point notation from older pagexml versions
-    for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
+    for coord in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
         cc = []
-        for point in c.xpath("./ns:Point", namespaces=ns):
+        for point in coord.xpath("./ns:Point", namespaces=ns):
             cx = point.attrib["x"]
             cy = point.attrib["y"]
-            c.remove(point)
+            coord.remove(point)
             cc.append(f"{cx},{cy}")
-        c.attrib["points"] = " ".join(cc)
+        coord.attrib["points"] = " ".join(cc)
 
     coordmap = {}
-    for r in root.xpath('//ns:TextRegion', namespaces=ns):
-        rid = r.attrib["id"]
-        coordmap[rid] = {"type": r.attrib.get("type", "TextRegion")}
+    for text_region in root.xpath('//ns:TextRegion', namespaces=ns):
+        rid = text_region.attrib["id"]
+        coordmap[rid] = {"type": text_region.attrib.get("type", "TextRegion")}
         coordmap[rid]["coords"] = []
-        for c in r.xpath("./ns:Coords", namespaces=ns) + r.xpath("./Coords"):
+        for c in text_region.xpath("./ns:Coords", namespaces=ns) + text_region.xpath("./Coords"):
             coordmap[rid]["coordstring"] = c.attrib["points"]
             coordstrings = [x.split(",") for x in c.attrib["points"].split()]
             coordmap[rid]["coords"] += [[int(x[0]), int(x[1])]
                                         for x in coordstrings]
-        if 'orientation' in r.attrib:
-            coordmap[rid]["orientation"] = float(r.attrib["orientation"])
+        if 'orientation' in text_region.attrib:
+            coordmap[rid]["orientation"] = float(text_region.attrib["orientation"])
 
     s_print(f"[{name}] Extract Textlines from TextRegions")
     im = Image.open(imgpath)
@@ -355,15 +350,15 @@ def pagexmllineseg(xmlfile, imgpath,
                 draw.polygon(poly, fill=white)
         del draw
 
-    for n, c in enumerate(sorted(coordmap)):
-        coords = coordmap[c]['coords']
+    for idx, coord in enumerate(sorted(coordmap)):
+        coords = coordmap[coord]['coords']
 
         if len(coords) < 3:
             continue
         cropped, [minX, minY, maxX, maxY] = imgmanipulate.cutout(im, coords)
 
-        if 'orientation' in coordmap[c]:
-            orientation = coordmap[c]['orientation']
+        if 'orientation' in coordmap[coord]:
+            orientation = coordmap[coord]['orientation']
         else:
             orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
                                                  skewsteps=skewsteps)
@@ -373,7 +368,7 @@ def pagexmllineseg(xmlfile, imgpath,
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
                 cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)).astype(np.uint8))
-            if coordmap[c]["type"] == "drop-capital":
+            if coordmap[coord]["type"] == "drop-capital":
                 lines = [1]
             else:
                 # if line in
@@ -396,25 +391,25 @@ def pagexmllineseg(xmlfile, imgpath,
         # Iterpret whole region as textline if no textline are found
         if not lines or len(lines) == 0:
             coordstrg = " ".join([f"{str(int(x))},{str(int(y))}" for x, y in coords])
-            textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
+            textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns)[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": f"{c}_l{str(n+1).zfill(3)}"})
+                                       attrib={"id": f"{coord}_l{str(idx+1).zfill(3)}"})
             etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
         else:
-            for n, poly in enumerate(lines):
-                if coordmap[c]["type"] == "drop-capital":
-                    coordstrg = coordmap[c]["coordstring"]
+            for idx, poly in enumerate(lines):
+                if coordmap[coord]["type"] == "drop-capital":
+                    coordstrg = coordmap[coord]["coordstring"]
                 else:
                     coords = ((x+minX, y+minY) for x, y in poly)
                     coordstrg = " ".join([f"{str(int(x))},{str(int(y))}" for x, y in coords])
 
-                textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
+                textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns)[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
-                                           attrib={"id": f"{c}_l{str(n+1).zfill(3)}"})
+                                           attrib={"id": f"{coord}_l{str(idx+1).zfill(3)}"})
                 etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
     s_print(f"[{name}] Generate new PAGE XML with text lines")
