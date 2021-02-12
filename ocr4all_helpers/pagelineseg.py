@@ -15,6 +15,7 @@ from skimage.measure import find_contours, approximate_polygon
 from skimage.draw import line_aa
 from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
+from typing import Tuple
 
 from lxml import etree
 from PIL import Image, ImageDraw
@@ -47,12 +48,12 @@ class Record(object):
         self.__dict__.update(kwargs)
 
 
-# Given a line segmentation map, computes a list
-# of tuples consisting of 2D slices and masked images.
-#
-# Implementation derived from ocropy with changes to allow extracting
-# the line coords/polygons
-def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength=1.0):
+def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[int, int], scale: int, growth: Tuple[int, int],
+                  max_iterations: int, filter_strength: float = 1.0):
+    """Given a line segmentation map, computes a list of tuples consisting of 2D slices and masked images.
+
+    Implementation derived from ocropy with changes to allow extracting the line coords/polygons
+    """
     lobjects = morph.find_objects(segmentation)
     lines = []
     for idx, obj in enumerate(lobjects):
@@ -82,8 +83,10 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, f
     return lines
 
 
-def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
-    # use gradient filtering to find baselines
+def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale: float = 1.0, usegauss: bool = False):
+    """
+    Uses gradient filtering to find baselines
+    """
     boxmap = pseg.compute_boxmap(binary, scale)
     cleaned = boxmap*binary
     if usegauss:
@@ -111,8 +114,11 @@ def boundary(contour: np.ndarray):
     return [x_min, x_max, y_min, y_max]
 
 
-# Approximate a single polygon around high pixels in a mask, via smearing
-def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), max_iterations=1000):
+def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[int, int] = (1, 2),
+                              growth: Tuple[float, float] = (1.1, 1.1), max_iterations: int = 1000):
+    """
+    Approximates a single polygon around high pixels in a mask, via smearing
+    """
     padding = 1
     work_image = np.pad(np.copy(line_mask), pad_width=padding, mode='constant', constant_values=False)
 
@@ -198,19 +204,18 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None,
-            max_blackseps=0, widen_blackseps=10,
-            max_whiteseps=3, minheight_whiteseps=10,
-            smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
-            fail_save_iterations=1000, vscale=1.0, hscale=1.0,
-            minscale=12.0, maxlines=300,
-            threshold=0.2, usegauss=False):
+def segment(im: Image, scale: float = None,
+            max_blackseps: int = 0, widen_blackseps: int = 10,
+            max_whiteseps: int = 3, minheight_whiteseps: int = 10,
+            smear_strength: Tuple[int, int] = (1, 2), growth: Tuple[float, float] = (1.1, 1.1), orientation: int = 0,
+            fail_save_iterations: int = 1000, vscale: float = 1.0, hscale: float = 1.0,
+            minscale: float = 12.0, maxlines: int = 300,
+            threshold: float = 0.2, usegauss: bool = False):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
     each line in reading order.
     """
-
     colors = im.getcolors(2)
     if (im.mode not in ['1', "L"]) and not (colors is not None and len(colors) == 2):
         raise ValueError('Image is not bi-level')
