@@ -15,6 +15,7 @@ from skimage.measure import find_contours, approximate_polygon
 from skimage.draw import line_aa
 from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
+from typing import List, Tuple, Union
 
 from lxml import etree
 from PIL import Image, ImageDraw
@@ -33,48 +34,48 @@ from threading import Lock
 s_print_lock = Lock()
 
 
-def s_print(*a, **b):
+def s_print(*args, **kwargs):
     with s_print_lock:
-        print(*a, **b)
+        print(*args, **kwargs)
 
 
 def s_print_error(*objs):
     s_print("ERROR: ", *objs, file=sys.stderr)
 
 
-class record(object):
-    def __init__(self, **kw):
-        self.__dict__.update(kw)
+class Record(object):
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 
-# Given a line segmentation map, computes a list
-# of tuples consisting of 2D slices and masked images.
-#
-# Implementation derived from ocropy with changes to allow extracting
-# the line coords/polygons
-def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength=1.0):
+def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[int, int], scale: int, growth: Tuple[float, float],
+                  max_iterations: int, filter_strength: float = 1.0) -> List[Record]:
+    """Given a line segmentation map, computes a list of tuples consisting of 2D slices and masked images.
+
+    Implementation derived from ocropy with changes to allow extracting the line coords/polygons
+    """
     lobjects = morph.find_objects(segmentation)
     lines = []
-    for i, o in enumerate(lobjects):
-        if o is None:
+    for idx, obj in enumerate(lobjects):
+        if obj is None:
             continue
-        if sl.dim1(o) < 2*scale*filter_strength or sl.dim0(o) < scale*filter_strength:
+        if sl.dim1(obj) < 2*scale*filter_strength or sl.dim0(obj) < scale*filter_strength:
             continue
-        mask = (segmentation[o] == i+1)
+        mask = (segmentation[obj] == idx+1)
         if np.amax(mask) == 0:
             continue
 
-        result = record()
-        result.label = i+1
-        result.bounds = o
+        result = Record()
+        result.label = idx+1
+        result.bounds = obj
         polygon = []
-        if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
+        if ((segmentation[obj] != 0) == (segmentation[obj] != idx+1)).any():
             ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
             ppoints = ppoints[1:] if ppoints else []
-            polygon = [(o[1].start+x, o[0].start+y) for x, y in ppoints]
+            polygon = [(obj[1].start+x, obj[0].start+y) for x, y in ppoints]
         if not polygon:
-            polygon = [(o[1].start, o[0].start), (o[1].stop,  o[0].start),
-                       (o[1].stop,  o[0].stop),  (o[1].start, o[0].stop)]
+            polygon = [(obj[1].start, obj[0].start), (obj[1].stop,  obj[0].start),
+                       (obj[1].stop,  obj[0].stop),  (obj[1].start, obj[0].stop)]
         result.polygon = polygon
         result.mask = mask
         lines.append(result)
@@ -82,8 +83,11 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, f
     return lines
 
 
-def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
-    # use gradient filtering to find baselines
+def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale: float = 1.0,
+                     usegauss: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Uses gradient filtering to find baselines
+    """
     boxmap = pseg.compute_boxmap(binary, scale)
     cleaned = boxmap*binary
     if usegauss:
@@ -102,17 +106,21 @@ def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
     return bottom, top, boxmap
 
 
-def boundary(contour):
-    Xmin = np.min(contour[:, 0])
-    Xmax = np.max(contour[:, 0])
-    Ymin = np.min(contour[:, 1])
-    Ymax = np.max(contour[:, 1])
+def boundary(contour: np.ndarray) -> List[np.float64]:
+    x_min = np.min(contour[:, 0])
+    x_max = np.max(contour[:, 0])
+    y_min = np.min(contour[:, 1])
+    y_max = np.max(contour[:, 1])
 
-    return [Xmin, Xmax, Ymin, Ymax]
+    return [x_min, x_max, y_min, y_max]
 
 
-# Approximate a single polygon around high pixels in a mask, via smearing
-def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), max_iterations=1000):
+def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[int, int] = (1, 2),
+                              growth: Tuple[float, float] = (1.1, 1.1),
+                              max_iterations: int = 1000) -> List[Tuple[np.float64, np.float64]]:
+    """
+    Approximates a single polygon around high pixels in a mask, via smearing
+    """
     padding = 1
     work_image = np.pad(np.copy(line_mask), pad_width=padding, mode='constant', constant_values=False)
 
@@ -123,8 +131,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
         while len(contours) > 1:
             # Get bounds with dimensions
             bounds = [boundary(contour) for contour in contours]
-            widths = [b[1]-b[0] for b in bounds]
-            heights = [b[3]-b[2] for b in bounds]
+            widths = [bound[1]-bound[0] for bound in bounds]
+            heights = [bound[3]-bound[2] for bound in bounds]
 
             # Calculate x and y median distances (or at least 1)
             width_median = sorted(widths)[int(len(widths) / 2)]
@@ -164,8 +172,7 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             # Failsave if contours can't be smeared together after x iterations
             # Draw lines between the extreme points of each contour in order
             if iteration >= max_iterations and len(contours) > 1:
-                s_print(("Start fail save, since precise line generation took"
-                         " too many iterations ({}).").format(iteration))
+                s_print((f"Start fail save, since precise line generation took too many iterations ({iteration})."))
                 extreme_points = []
                 for contour in contours:
                     sorted_x = sorted(contour, key=lambda c: c[0])
@@ -198,19 +205,18 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None,
-            max_blackseps=0, widen_blackseps=10,
-            max_whiteseps=3, minheight_whiteseps=10,
-            smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
-            fail_save_iterations=1000, vscale=1.0, hscale=1.0,
-            minscale=12.0, maxlines=300,
-            threshold=0.2, usegauss=False):
+def segment(im: Image, scale: float = None,
+            max_blackseps: int = 0, widen_blackseps: int = 10,
+            max_whiteseps: int = 3, minheight_whiteseps: int = 10,
+            smear_strength: Tuple[int, int] = (1, 2), growth: Tuple[float, float] = (1.1, 1.1), orientation: int = 0,
+            fail_save_iterations: int = 1000, vscale: float = 1.0, hscale: float = 1.0,
+            minscale: float = 12.0, maxlines: int = 300,
+            threshold: float = 0.2, usegauss: bool = False) -> Union[None, List[List[Tuple[int, int]]]]:
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
     each line in reading order.
     """
-
     colors = im.getcolors(2)
     if (im.mode not in ['1', "L"]) and not (colors is not None and len(colors) == 2):
         raise ValueError('Image is not bi-level')
@@ -226,7 +232,7 @@ def segment(im, scale=None,
     if not scale:
         scale = pseg.estimate_scale(binary)
     if scale < minscale:
-        s_print_error("scale ({}) less than --minscale; skipping".format(scale))
+        s_print_error(f"scale ({scale}) less than --minscale; skipping")
         return
 
     binary = pseg.remove_hlines(binary, scale)
@@ -249,7 +255,7 @@ def segment(im, scale=None,
     segmentation = llabels*binary
 
     if np.amax(segmentation) > maxlines:
-        s_print_error("too many lines {}".format(np.amax(segmentation)))
+        s_print_error(f"too many lines {np.amax(segmentation)}")
         return
 
     lines_and_polygons = compute_lines(segmentation,
@@ -259,22 +265,18 @@ def segment(im, scale=None,
                                        fail_save_iterations)
 
     # Translate each point back to original
-    deltaX = (im_rotated.width - im.width) / 2
-    deltaY = (im_rotated.height - im.height) / 2
-    centerX = im_rotated.width / 2
-    centerY = im_rotated.height / 2
+    delta_x = (im_rotated.width - im.width) / 2
+    delta_y = (im_rotated.height - im.height) / 2
+    center_x = im_rotated.width / 2
+    center_y = im_rotated.height / 2
 
     def translate_back(point):
         # rotate point around center
         orient_rad = -1*orientation * (math.pi / 180)
-        rotatedX = ((point[0]-centerX) * math.cos(orient_rad)
-                    - (point[1]-centerY) * math.sin(orient_rad)
-                    + centerX)
-        rotatedY = ((point[0]-centerX) * math.sin(orient_rad)
-                    + (point[1]-centerY) * math.cos(orient_rad)
-                    + centerY)
+        rotated_x = ((point[0]-center_x) * math.cos(orient_rad) - (point[1]-center_y) * math.sin(orient_rad) + center_x)
+        rotated_y = ((point[0]-center_x) * math.sin(orient_rad) + (point[1]-center_y) * math.cos(orient_rad) + center_y)
         # move point
-        return int(rotatedX-deltaX), int(rotatedY-deltaY)
+        return int(rotated_x-delta_x), int(rotated_y-delta_y)
 
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
@@ -295,41 +297,41 @@ def pagexmllineseg(xmlfile, imgpath,
                    maxskew=2.0,
                    skewsteps=8,
                    usegauss=False,
-                   remove_images=False):
+                   remove_images=False) -> Tuple[str, int]:
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
-    s_print("""Start process for '{}'
-        |- Image: '{}'
-        |- Annotations: '{}' """.format(name, imgpath, xmlfile))
+    s_print(f"""Start process for '{name}'
+        |- Image: '{imgpath}'
+        |- Annotations: '{xmlfile}' """)
 
     root = etree.parse(xmlfile).getroot()
     ns = {"ns": root.nsmap[None]}
 
-    s_print("[{}] Retrieve TextRegions".format(name))
+    s_print(f"[{name}] Retrieve TextRegions")
 
     # convert point notation from older pagexml versions
-    for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
+    for coord in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
         cc = []
-        for point in c.xpath("./ns:Point", namespaces=ns):
+        for point in coord.xpath("./ns:Point", namespaces=ns):
             cx = point.attrib["x"]
             cy = point.attrib["y"]
-            c.remove(point)
-            cc.append(cx+","+cy)
-        c.attrib["points"] = " ".join(cc)
+            coord.remove(point)
+            cc.append(f"{cx},{cy}")
+        coord.attrib["points"] = " ".join(cc)
 
     coordmap = {}
-    for r in root.xpath('//ns:TextRegion', namespaces=ns):
-        rid = r.attrib["id"]
-        coordmap[rid] = {"type": r.attrib.get("type", "TextRegion")}
+    for text_region in root.xpath('//ns:TextRegion', namespaces=ns):
+        rid = text_region.attrib["id"]
+        coordmap[rid] = {"type": text_region.attrib.get("type", "TextRegion")}
         coordmap[rid]["coords"] = []
-        for c in r.xpath("./ns:Coords", namespaces=ns) + r.xpath("./Coords"):
+        for c in text_region.xpath("./ns:Coords", namespaces=ns) + text_region.xpath("./Coords"):
             coordmap[rid]["coordstring"] = c.attrib["points"]
             coordstrings = [x.split(",") for x in c.attrib["points"].split()]
             coordmap[rid]["coords"] += [[int(x[0]), int(x[1])]
                                         for x in coordstrings]
-        if 'orientation' in r.attrib:
-            coordmap[rid]["orientation"] = float(r.attrib["orientation"])
+        if 'orientation' in text_region.attrib:
+            coordmap[rid]["orientation"] = float(text_region.attrib["orientation"])
 
-    s_print("[{}] Extract Textlines from TextRegions".format(name))
+    s_print(f"[{name}] Extract Textlines from TextRegions")
     im = Image.open(imgpath)
 
     if remove_images:
@@ -348,26 +350,25 @@ def pagexmllineseg(xmlfile, imgpath,
                 draw.polygon(poly, fill=white)
         del draw
 
-    for n, c in enumerate(sorted(coordmap)):
-        coords = coordmap[c]['coords']
+    for idx, coord in enumerate(sorted(coordmap)):
+        coords = coordmap[coord]['coords']
 
         if len(coords) < 3:
             continue
         cropped, [minX, minY, maxX, maxY] = imgmanipulate.cutout(im, coords)
 
-        if 'orientation' in coordmap[c]:
-            orientation = coordmap[c]['orientation']
+        if 'orientation' in coordmap[coord]:
+            orientation = coordmap[coord]['orientation']
         else:
             orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
                                                  skewsteps=skewsteps)
-            s_print(("[{}] Skew estimate between +/-{} in {} steps."
-                     " Estimated {}°").format(name, maxskew, skewsteps, orientation))
+            s_print(f"[{name}] Skew estimate between +/-{maxskew} in {skewsteps} steps. Estimated {orientation}°")
 
         if cropped is not None:
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
                 cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)).astype(np.uint8))
-            if coordmap[c]["type"] == "drop-capital":
+            if coordmap[coord]["type"] == "drop-capital":
                 lines = [1]
             else:
                 # if line in
@@ -389,29 +390,29 @@ def pagexmllineseg(xmlfile, imgpath,
 
         # Iterpret whole region as textline if no textline are found
         if not lines or len(lines) == 0:
-            coordstrg = " ".join([str(x)+","+str(y) for x, y in coords])
-            textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+            coordstrg = " ".join([f"{str(int(x))},{str(int(y))}" for x, y in coords])
+            textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns)[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": "{}_l{:03d}".format(c, n+1)})
+                                       attrib={"id": f"{coord}_l{str(idx+1).zfill(3)}"})
             etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
         else:
-            for n, poly in enumerate(lines):
-                if coordmap[c]["type"] == "drop-capital":
-                    coordstrg = coordmap[c]["coordstring"]
+            for idx, poly in enumerate(lines):
+                if coordmap[coord]["type"] == "drop-capital":
+                    coordstrg = coordmap[coord]["coordstring"]
                 else:
                     coords = ((x+minX, y+minY) for x, y in poly)
-                    coordstrg = " ".join([str(int(x))+","+str(int(y)) for x, y in coords])
+                    coordstrg = " ".join([f"{str(int(x))},{str(int(y))}" for x, y in coords])
 
-                textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+                textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns)[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
-                                           attrib={"id": "{}_l{:03d}".format(c, n+1)})
+                                           attrib={"id": f"{coord}_l{str(idx+1).zfill(3)}"})
                 etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
-    s_print("[{}] Generate new PAGE XML with text lines".format(name))
+    s_print(f"[{name}] Generate new PAGE XML with text lines")
     xmlstring = etree.tounicode(root.getroottree()).replace(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2010-03-19",
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
@@ -603,8 +604,8 @@ def cli():
             image, pagexml = data
             path_out = pagexml
         else:
-            raise ValueError("Invalid data line with length {} "
-                             "instead of 2 or 3".format(len(data)))
+            raise ValueError(f"Invalid data line with length {len(data)} "
+                             "instead of 2 or 3")
 
         xml_output, _ = pagexmllineseg(pagexml, image,
                                        scale=args.scale,
@@ -624,10 +625,10 @@ def cli():
                                        usegauss=args.usegauss,
                                        remove_images=args.remove_images)
         with open(path_out, 'w+') as output_file:
-            s_print("Save annotations into '{}'".format(path_out))
+            s_print(f"Save annotations into '{path_out}'")
             output_file.write(xml_output)
     
-    s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
+    s_print(f"Process {len(dataset)} images, with {args.parallel} in parallel")
 
     # Pool of all parallel processed pagexmllineseg
     with ThreadPool(processes=min(args.parallel, len(dataset))) as pool:
