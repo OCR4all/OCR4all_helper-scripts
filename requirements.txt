@@ -1,4 +1,5 @@
 numpy
+click
 lxml
 scikit-image
 Pillow
