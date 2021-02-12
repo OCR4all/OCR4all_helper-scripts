@@ -42,9 +42,9 @@ def s_print_error(*objs):
     s_print("ERROR: ", *objs, file=sys.stderr)
 
 
-class record(object):
-    def __init__(self, **kw):
-        self.__dict__.update(kw)
+class Record(object):
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 
 # Given a line segmentation map, computes a list
@@ -64,7 +64,7 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, f
         if np.amax(mask) == 0:
             continue
 
-        result = record()
+        result = Record()
         result.label = i+1
         result.bounds = o
         polygon = []
