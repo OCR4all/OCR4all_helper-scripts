@@ -164,8 +164,8 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
             # Failsave if contours can't be smeared together after x iterations
             # Draw lines between the extreme points of each contour in order
             if iteration >= max_iterations and len(contours) > 1:
-                s_print(("Start fail save, since precise line generation took"
-                         " too many iterations ({}).").format(iteration))
+                s_print((f"Start fail save, since precise line generation took"
+                         " too many iterations ({iteration})."))
                 extreme_points = []
                 for contour in contours:
                     sorted_x = sorted(contour, key=lambda c: c[0])
@@ -226,7 +226,7 @@ def segment(im, scale=None,
     if not scale:
         scale = pseg.estimate_scale(binary)
     if scale < minscale:
-        s_print_error("scale ({}) less than --minscale; skipping".format(scale))
+        s_print_error(f"scale ({scale}) less than --minscale; skipping")
         return
 
     binary = pseg.remove_hlines(binary, scale)
@@ -249,7 +249,7 @@ def segment(im, scale=None,
     segmentation = llabels*binary
 
     if np.amax(segmentation) > maxlines:
-        s_print_error("too many lines {}".format(np.amax(segmentation)))
+        s_print_error(f"too many lines {np.amax(segmentation)}")
         return
 
     lines_and_polygons = compute_lines(segmentation,
@@ -297,14 +297,14 @@ def pagexmllineseg(xmlfile, imgpath,
                    usegauss=False,
                    remove_images=False):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
-    s_print("""Start process for '{}'
-        |- Image: '{}'
-        |- Annotations: '{}' """.format(name, imgpath, xmlfile))
+    s_print(f"""Start process for '{name}'
+        |- Image: '{imgpath}'
+        |- Annotations: '{xmlfile}' """)
 
     root = etree.parse(xmlfile).getroot()
     ns = {"ns": root.nsmap[None]}
 
-    s_print("[{}] Retrieve TextRegions".format(name))
+    s_print(f"[{name}] Retrieve TextRegions")
 
     # convert point notation from older pagexml versions
     for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
@@ -313,7 +313,7 @@ def pagexmllineseg(xmlfile, imgpath,
             cx = point.attrib["x"]
             cy = point.attrib["y"]
             c.remove(point)
-            cc.append(cx+","+cy)
+            cc.append(f"{cx},{cy}")
         c.attrib["points"] = " ".join(cc)
 
     coordmap = {}
@@ -329,7 +329,7 @@ def pagexmllineseg(xmlfile, imgpath,
         if 'orientation' in r.attrib:
             coordmap[rid]["orientation"] = float(r.attrib["orientation"])
 
-    s_print("[{}] Extract Textlines from TextRegions".format(name))
+    s_print(f"[{format}] Extract Textlines from TextRegions")
     im = Image.open(imgpath)
 
     if remove_images:
@@ -360,8 +360,8 @@ def pagexmllineseg(xmlfile, imgpath,
         else:
             orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
                                                  skewsteps=skewsteps)
-            s_print(("[{}] Skew estimate between +/-{} in {} steps."
-                     " Estimated {}°").format(name, maxskew, skewsteps, orientation))
+            s_print((f"[{name}] Skew estimate between +/-{maxskew} in {skewsteps} steps."
+                     " Estimated {orientation}°"))
 
         if cropped is not None:
             colors = cropped.getcolors(2)
@@ -389,12 +389,12 @@ def pagexmllineseg(xmlfile, imgpath,
 
         # Iterpret whole region as textline if no textline are found
         if not lines or len(lines) == 0:
-            coordstrg = " ".join([str(x)+","+str(y) for x, y in coords])
-            textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+            coordstrg = " ".join([f"{str(int(x))},{str(int(y))}" for x, y in coords])
+            textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": "{}_l{:03d}".format(c, n+1)})
+                                       attrib={"id": f"{c}_l{str(n+1).zfill(3)}"})
             etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
         else:
             for n, poly in enumerate(lines):
@@ -402,16 +402,16 @@ def pagexmllineseg(xmlfile, imgpath,
                     coordstrg = coordmap[c]["coordstring"]
                 else:
                     coords = ((x+minX, y+minY) for x, y in poly)
-                    coordstrg = " ".join([str(int(x))+","+str(int(y)) for x, y in coords])
+                    coordstrg = " ".join([f"{str(int(x))},{str(int(y))}" for x, y in coords])
 
-                textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+                textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
-                                           attrib={"id": "{}_l{:03d}".format(c, n+1)})
+                                           attrib={"id": f"{c}_l{str(n+1).zfill(3)}"})
                 etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
-    s_print("[{}] Generate new PAGE XML with text lines".format(name))
+    s_print(f"[{name}] Generate new PAGE XML with text lines")
     xmlstring = etree.tounicode(root.getroottree()).replace(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2010-03-19",
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
@@ -603,8 +603,8 @@ def cli():
             image, pagexml = data
             path_out = pagexml
         else:
-            raise ValueError("Invalid data line with length {} "
-                             "instead of 2 or 3".format(len(data)))
+            raise ValueError(f"Invalid data line with length {len(data)} "
+                             "instead of 2 or 3")
 
         xml_output, _ = pagexmllineseg(pagexml, image,
                                        scale=args.scale,
@@ -624,10 +624,10 @@ def cli():
                                        usegauss=args.usegauss,
                                        remove_images=args.remove_images)
         with open(path_out, 'w+') as output_file:
-            s_print("Save annotations into '{}'".format(path_out))
+            s_print(f"Save annotations into '{path_out}'")
             output_file.write(xml_output)
     
-    s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
+    s_print(f"Process {len(dataset)} images, with {args.parallel} in parallel")
 
     # Pool of all parallel processed pagexmllineseg
     with ThreadPool(processes=min(args.parallel, len(dataset))) as pool:
