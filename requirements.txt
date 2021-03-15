@@ -4,3 +4,5 @@ lxml
 scikit-image
 Pillow
 argparse
+alphashape
+shapely

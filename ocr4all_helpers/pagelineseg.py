@@ -11,8 +11,12 @@
 #   https://github.com/mittagessen/kraken
 
 import numpy as np
-from skimage.measure import find_contours, approximate_polygon
-from skimage.draw import line_aa
+
+from shapely.geometry import MultiPoint
+from scipy.spatial import ConvexHull
+import alphashape
+
+
 from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
 from typing import List, Tuple, Union
@@ -25,6 +29,7 @@ from multiprocessing.pool import ThreadPool
 import json
 
 import argparse
+from matplotlib import pyplot as plt
 
 import os
 import sys
@@ -48,8 +53,7 @@ class Record(object):
         self.__dict__.update(kwargs)
 
 
-def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[int, int], scale: int, growth: Tuple[float, float],
-                  max_iterations: int, filter_strength: float = 1.0) -> List[Record]:
+def compute_lines(segmentation: np.ndarray, scale: int, filter_strength: float = 1.0) -> List[Record]:
     """Given a line segmentation map, computes a list of tuples consisting of 2D slices and masked images.
 
     Implementation derived from ocropy with changes to allow extracting the line coords/polygons
@@ -70,8 +74,7 @@ def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[int, int], sca
         result.bounds = obj
         polygon = []
         if ((segmentation[obj] != 0) == (segmentation[obj] != idx+1)).any():
-            ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
-            ppoints = ppoints[1:] if ppoints else []
+            ppoints = shape_from_mask(mask, "bounding_box")
             polygon = [(obj[1].start+x, obj[0].start+y) for x, y in ppoints]
         if not polygon:
             polygon = [(obj[1].start, obj[0].start), (obj[1].stop,  obj[0].start),
@@ -115,101 +118,46 @@ def boundary(contour: np.ndarray) -> List[np.float64]:
     return [x_min, x_max, y_min, y_max]
 
 
-def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[int, int] = (1, 2),
-                              growth: Tuple[float, float] = (1.1, 1.1),
-                              max_iterations: int = 1000) -> List[Tuple[np.float64, np.float64]]:
-    """
-    Approximates a single polygon around high pixels in a mask, via smearing
-    """
-    padding = 1
-    work_image = np.pad(np.copy(line_mask), pad_width=padding, mode='constant', constant_values=False)
+def shape_from_mask(mask: np.ndarray, shape: str) -> List[Tuple[np.float64, np.float64]]:
+    dispatch_table = {
+        "bounding_box": calc_bbox,
+        "convex_hull": calc_convex_hull,
+        "alphashape": calc_alphashape
+    }
 
-    contours = find_contours(work_image, 0.5, fully_connected="low")
+    return dispatch_table.get(shape)(mask)
 
-    if len(contours) > 0:
-        iteration = 1
-        while len(contours) > 1:
-            # Get bounds with dimensions
-            bounds = [boundary(contour) for contour in contours]
-            widths = [bound[1]-bound[0] for bound in bounds]
-            heights = [bound[3]-bound[2] for bound in bounds]
 
-            # Calculate x and y median distances (or at least 1)
-            width_median = sorted(widths)[int(len(widths) / 2)]
-            height_median = sorted(heights)[int(len(heights) / 2)]
+def calc_bbox(mask: np.ndarray) -> List[Tuple[np.float64, np.float64]]:
+    rows = np.any(mask, axis=1)
+    cols = np.any(mask, axis=0)
+    y_min, y_max = np.where(rows)[0][[0, -1]]
+    x_min, x_max = np.where(cols)[0][[0, -1]]
 
-            # Calculate x and y smear distance
-            smear_distance_x = math.ceil(width_median*smear_strength[0] * (iteration*growth[0]))
-            smear_distance_y = math.ceil(height_median*smear_strength[1] * (iteration*growth[1]))
+    return [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)]
 
-            # Smear image in x and y direction
-            height, width = work_image.shape
-            gaps_current_x = [float('Inf')]*height
-            for x in range(width):
-                gap_current_y = float('Inf')
-                for y in range(height):
-                    if work_image[y, x]:
-                        # Entered Contour
-                        gap_current_x = gaps_current_x[y]
 
-                        if gap_current_y < smear_distance_y and gap_current_y > 0:
-                            # Draw over
-                            work_image[y-gap_current_y:y, x] = True
-                        
-                        if gap_current_x < smear_distance_x and gap_current_x > 0:
-                            # Draw over
-                            work_image[y, x-gap_current_x:x] = True
+def calc_alphashape(mask: np.ndarray, alpha: float = 0.0):
+    points = np.argwhere(mask).tolist()
+    points = [(p[1], p[0]) for p in points]
+    alpha_shape = alphashape.alphashape(points, alpha)
 
-                        gap_current_y = 0
-                        gaps_current_x[y] = 0
-                    else:
-                        # Entered/Still in Gap
-                        gap_current_y += 1
-                        gaps_current_x[y] += 1
-            # Find contours of current smear
-            contours = find_contours(work_image, 0.5, fully_connected="low")
+    return list(alpha_shape.exterior.coords)
 
-            # Failsave if contours can't be smeared together after x iterations
-            # Draw lines between the extreme points of each contour in order
-            if iteration >= max_iterations and len(contours) > 1:
-                s_print((f"Start fail save, since precise line generation took too many iterations ({iteration})."))
-                extreme_points = []
-                for contour in contours:
-                    sorted_x = sorted(contour, key=lambda c: c[0])
-                    sorted_y = sorted(contour, key=lambda c: c[1])
-                    extreme_points.append((tuple(sorted_x[0]), tuple(sorted_y[0]),
-                                           tuple(sorted_x[-1]), tuple(sorted_y[-1])))
-                
-                sorted_extreme = sorted(extreme_points, key=lambda e: e)
-                for c1, c2 in zip(sorted_extreme, sorted_extreme[1:]):
-                    for p1 in c1:
-                        nearest = None
-                        nearest_dist = math.inf
-                        for p2 in c2:
-                            distance = math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
-                            if distance < nearest_dist:
-                                nearest = p2
-                                nearest_dist = distance
-                        if nearest:
-                            # Draw line between nearest points
-                            yy, xx, _ = line_aa(int(p1[0]), int(nearest[0]), int(p2[1]), int(nearest[1]))
-                            # Remove border points
-                            line_points = [(x, y) for x, y in zip(xx, yy) if 0 < x < width and 0 < y < height]
-                            xx_filtered, yy_filtered = zip(*line_points)
-                            # Paint
-                            work_image[yy_filtered, xx_filtered] = True
-                contours = find_contours(work_image, 0.5, fully_connected="low")
 
-            iteration += 1
-        return [(p[1]-padding, p[0]-padding) for p in approximate_polygon(contours[0], 0.1)]
-    return []
-    
+def calc_convex_hull(mask: np.ndarray) -> List[Tuple[np.float64, np.float64]]:
+    points = np.argwhere(mask).tolist()
+    points = [(p[1], p[0]) for p in points]
+    multi_points = MultiPoint(points)
+    convex_hull = multi_points.convex_hull
+
+    return list(convex_hull.exterior.coords)
+
 
 def segment(im: Image, scale: float = None,
             max_blackseps: int = 0, widen_blackseps: int = 10,
             max_whiteseps: int = 3, minheight_whiteseps: int = 10,
-            smear_strength: Tuple[int, int] = (1, 2), growth: Tuple[float, float] = (1.1, 1.1), orientation: int = 0,
-            fail_save_iterations: int = 1000, vscale: float = 1.0, hscale: float = 1.0,
+            orientation: int = 0, vscale: float = 1.0, hscale: float = 1.0,
             minscale: float = 12.0, maxlines: int = 300,
             threshold: float = 0.2, usegauss: bool = False) -> Union[None, List[List[Tuple[int, int]]]]:
     """
@@ -259,10 +207,7 @@ def segment(im: Image, scale: float = None,
         return
 
     lines_and_polygons = compute_lines(segmentation,
-                                       smear_strength,
-                                       scale,
-                                       growth,
-                                       fail_save_iterations)
+                                       scale)
 
     # Translate each point back to original
     delta_x = (im_rotated.width - im.width) / 2
@@ -291,9 +236,6 @@ def pagexmllineseg(xmlfile, imgpath,
                    minheight_whiteseps=10,
                    minscale=12,
                    maxlines=300,
-                   smear_strength=(1, 2),
-                   growth=(1.1, 1.1),
-                   fail_save_iterations=100,
                    maxskew=2.0,
                    skewsteps=8,
                    usegauss=False,
@@ -377,9 +319,7 @@ def pagexmllineseg(xmlfile, imgpath,
                                 widen_blackseps=widen_blackseps,
                                 max_whiteseps=max_whiteseps,
                                 minheight_whiteseps=minheight_whiteseps,
-                                smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
-                                fail_save_iterations=fail_save_iterations,
                                 vscale=vscale, hscale=hscale,
                                 minscale=minscale, maxlines=maxlines,
                                 usegauss=usegauss)
@@ -387,8 +327,15 @@ def pagexmllineseg(xmlfile, imgpath,
         else:
             lines = []
 
+        _img = Image.open(imgpath)
+        for poly in lines:
+            ImageDraw.Draw(_img).polygon(poly)
 
-        # Iterpret whole region as textline if no textline are found
+        plt.figure(figsize=(20, 20))
+        plt.imshow(_img)
+        plt.show()
+
+        # Interpret whole region as textline if no textlies are found
         if not lines or len(lines) == 0:
             coordstrg = " ".join([f"{str(int(x))},{str(int(y))}" for x, y in coords])
             textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns)[0]
@@ -615,11 +562,6 @@ def cli():
                                        widen_blackseps=args.widen_blackseps,
                                        max_whiteseps=args.max_whiteseps,
                                        minheight_whiteseps=args.minheight_whiteseps,
-                                       minscale=args.minscale,
-                                       maxlines=args.maxlines,
-                                       smear_strength=(args.smearX, args.smearY),
-                                       growth=(args.growthX, args.growthY),
-                                       fail_save_iterations=args.fail_save,
                                        maxskew=args.maxskew,
                                        skewsteps=args.skewsteps,
                                        usegauss=args.usegauss,
