@@ -35,7 +35,11 @@ def convert_page(xml: Path) -> etree.Element:
             Path(page_dir, _region), region["offset"])
 
     for order, region in enumerate(tree.xpath(".//p:TextRegion", namespaces=ns)):
-        region_data = regions_data[order]
+        try:
+            region_data = regions_data[order]
+        except IndexError as e:
+            print(f"Warning: No corresponding data found for region {region.attrib['id']} in page {xml.name}. Skipping...")
+            continue
 
         region_text_equiv = region.xpath("./p:TextEquiv", namespaces=ns)
 
