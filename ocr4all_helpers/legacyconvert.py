@@ -34,9 +34,9 @@ def convert_page(xml: Path) -> etree.Element:
         region["line_coords"], region["pred"], region["gt"], region["bin"], region["nrm"] = process_lines(
             Path(page_dir, _region), region["offset"])
 
-    for order, region in enumerate(tree.xpath(".//p:TextRegion", namespaces=ns)):
+    for idx, region in enumerate(tree.xpath(".//p:TextRegion", namespaces=ns)):
         try:
-            region_data = regions_data[order]
+            region_data = regions_data[idx]
         except IndexError as e:
             print(f"Warning: No corresponding data found for region {region.attrib['id']} in page {xml.name}. Skipping...")
             continue
