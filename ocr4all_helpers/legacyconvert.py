@@ -42,6 +42,7 @@ def convert_page(xml: Path) -> etree.Element:
             continue
 
         region_text_equiv = region.xpath("./p:TextEquiv", namespaces=ns)
+        region_coords = region.find("./p:Coords", namespaces=ns).attrib["points"]
 
         if region_text_equiv:
             region.remove(region_text_equiv[0])
@@ -52,7 +53,10 @@ def convert_page(xml: Path) -> etree.Element:
             line_counter += 1
 
             line_coord_elem = etree.Element("Coords")
-            line_coord_elem.attrib["points"] = calc_bbox(region_data, line_number)
+            if region_data["line_coords"][line_number] is not None:
+                line_coord_elem.attrib["points"] = region_data["line_coords"][line_number]
+            else:
+                line_coord_elem.attrib["points"] = region_coords
             line_elem.append(line_coord_elem)
 
             if region_data["pred"][line_number]:
@@ -108,48 +112,58 @@ def process_lines(path: Path, offset: Tuple[int, int]) -> Tuple[list, list, list
     :param offset: Region offset for calculating actual coordinates of the lines.
     :return: Information about line coordinates, prediction and ground truth text and binary and greyscale images.
     """
+
+    lines = set()
+
     line_coords = []
     prediction = []
     gt = []
     bin_imgs = []
     nrm_imgs = []
 
-    for line_coord in sorted(path.glob("./*.coords")):
-        prediction_file = Path(line_coord.parent, line_coord.stem).with_suffix(".pred.txt")
-        gt_file = Path(line_coord.parent, line_coord.stem).with_suffix(".gt.txt")
+    for line in path.glob("*"):
+        lines.add(line.name.split(".")[0])
 
-        bin_imgs.append(Path(line_coord.parent, line_coord.stem).with_suffix(".bin.png"))
-        nrm_imgs.append(Path(line_coord.parent, line_coord.stem).with_suffix(".nrm.png"))
+    for line in lines:
+        file_base = Path(path, line)
 
-        with line_coord.open("r") as coord_file:
-            (y_min, x_min, y_max, x_max) = coord_file.read().split(",")
-            line_coords.append([max(0, int(y_min) + offset[1]), max(0, int(x_min) + offset[0]),
-                                max(0, int(y_max) + offset[1]), max(0, int(x_max) + offset[0])])
+        line_coord = file_base.with_suffix(".coords")
+        if line_coord.is_file():
+            with line_coord.open("r") as coord_file:
+                (y_min, x_min, y_max, x_max) = coord_file.read().split(",")
+                line_coords.append(calc_bbox([max(0, int(y_min) + offset[1]), max(0, int(x_min) + offset[0]),
+                                              max(0, int(y_max) + offset[1]), max(0, int(x_max) + offset[0])]))
+        elif not line_coord.is_file() and len(lines) == 1:
+            line_coords.append(None)
+        else:
+            continue
 
+        prediction_file = file_base.with_suffix(".pred.txt")
         if prediction_file.is_file():
             with prediction_file.open("r") as pred_file:
                 prediction.append("".join(pred_file.read()))
         else:
             prediction.append(None)
 
+        gt_file = file_base.with_suffix(".gt.txt")
         if gt_file.is_file():
             with gt_file.open("r") as pred_file:
                 gt.append("".join(pred_file.read()))
         else:
             gt.append(None)
 
+        bin_imgs.append(file_base.with_suffix(".bin.png"))
+        nrm_imgs.append(file_base.with_suffix(".nrm.png"))
+
     return line_coords, prediction, gt, bin_imgs, nrm_imgs
 
 
-def calc_bbox(region: dict, linenumber: int) -> str:
+def calc_bbox(coords: list) -> str:
     """Calculates bounding from line coordinate files.
 
-    :param region: Region data dictionary.
-    :param linenumber: Number of the line for which the bounding box shall be calculated.
+    :param coords: List containing coordinates.
     :return: String representation of the bounding box.
     """
-    coords = region["line_coords"][linenumber]
-
     return f"{coords[1]},{coords[2]} {coords[1]},{coords[0]} {coords[3]},{coords[0]} {coords[3]},{coords[2]}"
 
 
@@ -171,7 +185,7 @@ def main():
 
     args = parser.parse_args()
 
-    for xml in Path(args.path).glob("*.xml"):
+    for xml in sorted(list(Path(args.path).glob("*.xml"))):
         updated_page = convert_page(xml)
         write_xml(xml, updated_page)
 
