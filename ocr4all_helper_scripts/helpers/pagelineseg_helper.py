@@ -41,13 +41,11 @@ def s_print_error(*objs):
     s_print("ERROR: ", *objs, file=sys.stderr)
 
 
-# Given a line segmentation map, computes a list
-# of tuples consisting of 2D slices and masked images.
-#
-# Implementation derived from ocropy with changes to allow extracting
-# the line coords/polygons
 def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[float, float], scale: int,
                   growth: Tuple[float, float], max_iterations: int, filter_strength: float) -> List[Record]:
+    """Given a line segmentation map, computes a list of tuples consisting of 2D slices and masked images.
+    Implementation derived from ocropy with changes to allow extracting the line coords/polygons.
+    """
     lobjects = morph.find_objects(segmentation)
     lines = []
     for i, o in enumerate(lobjects):
@@ -79,7 +77,8 @@ def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[float, float],
 
 def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale: float = 1.0,
                      usegauss: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    # use gradient filtering to find baselines
+    """Use gradient filtering to find baselines
+    """
     boxmap = pseg.compute_boxmap(binary, scale)
     cleaned = boxmap * binary
     if usegauss:
@@ -99,6 +98,8 @@ def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale
 
 
 def boundary(contour: np.ndarray) -> List[np.float64]:
+    """Calculates boundary of contour
+    """
     x_min = np.min(contour[:, 0])
     x_max = np.max(contour[:, 0])
     y_min = np.min(contour[:, 1])
@@ -107,9 +108,10 @@ def boundary(contour: np.ndarray) -> List[np.float64]:
     return [x_min, x_max, y_min, y_max]
 
 
-# Approximate a single polygon around high pixels in a mask, via smearing
 def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float, float] = (1.0, 2.0),
                               growth: Tuple[float, float] = (1.1, 1.1), max_iterations: int = 1000):
+    """Approximate a single polygon around high pixels in a mask, via smearing
+    """
     padding = 1
     work_image = np.pad(np.copy(line_mask), pad_width=padding, mode='constant', constant_values=False)
 
