@@ -38,10 +38,10 @@ import click
                    "will be more precise but will also take longer.")
 @click.option("-p", "--parallel", type=int, default=1,
               help="Number of threads parallelly working on images.")
-@click.option("-x", "--smear-x", type=float, default=2,
+@click.option("-x", "--smear-x", type=float, default=2.0,
               help="Smearing strength in X direction for the algorithm calculating the textline polygon wrapping all "
                    "contents.")
-@click.option("-y", "--smear-y", type=float, default=1,
+@click.option("-y", "--smear-y", type=float, default=1.0,
               help="Smearing strength in Y direction for the algorithm calculating the textline polygon wrapping all "
                    "contents.")
 @click.option("--growth-x", type=float, default=1.1,

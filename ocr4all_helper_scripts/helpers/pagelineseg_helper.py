@@ -15,6 +15,7 @@ from ocr4all_helper_scripts.utils.datastructures import Record
 
 import os
 import sys
+from typing import List, Tuple
 
 import numpy as np
 from skimage.measure import find_contours, approximate_polygon
@@ -44,7 +45,8 @@ def s_print_error(*objs):
 #
 # Implementation derived from ocropy with changes to allow extracting
 # the line coords/polygons
-def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength):
+def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[float, float], scale: int,
+                  growth: Tuple[float, float], max_iterations: int, filter_strength: float) -> List[Record]:
     lobjects = morph.find_objects(segmentation)
     lines = []
     for i, o in enumerate(lobjects):
@@ -74,7 +76,8 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, f
     return lines
 
 
-def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
+def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale: float = 1.0,
+                     usegauss: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     # use gradient filtering to find baselines
     boxmap = pseg.compute_boxmap(binary, scale)
     cleaned = boxmap*binary
@@ -94,17 +97,18 @@ def compute_gradmaps(binary, scale, vscale=1.0, hscale=1.0, usegauss=False):
     return bottom, top, boxmap
 
 
-def boundary(contour):
-    Xmin = np.min(contour[:, 0])
-    Xmax = np.max(contour[:, 0])
-    Ymin = np.min(contour[:, 1])
-    Ymax = np.max(contour[:, 1])
+def boundary(contour: np.ndarray) -> List[np.float64]:
+    x_min = np.min(contour[:, 0])
+    x_max = np.max(contour[:, 0])
+    y_min = np.min(contour[:, 1])
+    y_max = np.max(contour[:, 1])
 
-    return [Xmin, Xmax, Ymin, Ymax]
+    return [x_min, x_max, y_min, y_max]
 
 
 # Approximate a single polygon around high pixels in a mask, via smearing
-def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1), max_iterations=1000):
+def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float, float] = (1.0, 2.0),
+                              growth: Tuple[float, float] = (1.1, 1.1), max_iterations: int = 1000):
     padding = 1
     work_image = np.pad(np.copy(line_mask), pad_width=padding, mode='constant', constant_values=False)
 
@@ -189,9 +193,11 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None, max_blackseps=0, widen_blackseps=10, max_whiteseps=3, minheight_whiteseps=10,
-            filter_strength=1.0, smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=1000,
-            vscale=1.0, hscale=1.0, minscale=12.0, maxlines=300, threshold=0.2, usegauss=False):
+def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blackseps: int = 10, max_whiteseps: int = 3,
+            minheight_whiteseps: int = 10, filter_strength: float = 1.0,
+            smear_strength: Tuple[float, float] = (1.0, 2.0), growth: Tuple[float, float] = (1.1, 1.1),
+            orientation: int = 0, fail_save_iterations: int = 1000, vscale: float = 1.0, hscale: float = 1.0,
+            minscale: float = 12.0, maxlines: int = 300, threshold: float = 0.2, usegauss: bool = False):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -267,24 +273,25 @@ def segment(im, scale=None, max_blackseps=0, widen_blackseps=10, max_whiteseps=3
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
 
-def pagexmllineseg(xmlfile, imgpath,
-                   scale=None,
-                   vscale=1.0,
-                   hscale=1.0,
-                   max_blackseps=0,
-                   widen_blackseps=10,
-                   max_whiteseps=-1,
-                   minheight_whiteseps=10,
-                   minscale=12,
-                   maxlines=300,
-                   smear_strength=(1, 2),
-                   growth=(1.1, 1.1),
-                   filter_strength=1.0,
-                   fail_save_iterations=100,
-                   maxskew=2.0,
-                   skewsteps=8,
-                   usegauss=False,
-                   remove_images=False):
+def pagexmllineseg(xmlfile: str,
+                   imgpath: str,
+                   scale: float = None,
+                   vscale: float = 1.0,
+                   hscale: float = 1.0,
+                   max_blackseps: int = 0,
+                   widen_blackseps: int = 10,
+                   max_whiteseps: int = -1,
+                   minheight_whiteseps: int = 10,
+                   minscale: int = 12,
+                   maxlines: int = 300,
+                   smear_strength: Tuple[float, float] = (1.0, 2.0),
+                   growth: Tuple[float, float] = (1.1, 1.1),
+                   filter_strength: float = 1.0,
+                   fail_save_iterations: int = 100,
+                   maxskew: float = 2.0,
+                   skewsteps: int = 8,
+                   usegauss: bool = False,
+                   remove_images: bool = False):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print(f"""Start process for '{name}'
         |- Image: '{imgpath}'
