@@ -19,9 +19,9 @@ def s_print(*a, **b):
 
 def pagexmlskewestimate(xmlfile: str, imgpath: str, from_scratch: bool = False, maxskew: int = 2, skewsteps: int = 8):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
-    s_print("""Start process for '{}'
-        |- Image: '{}'
-        |- Annotations: '{}' """.format(name, imgpath, xmlfile))
+    s_print(f"""Start process for '{name}'
+        |- Image: '{imgpath}'
+        |- Annotations: '{xmlfile}' """)
 
     im = Image.open(imgpath)
     root = etree.parse(xmlfile).getroot()
@@ -29,7 +29,7 @@ def pagexmlskewestimate(xmlfile: str, imgpath: str, from_scratch: bool = False, 
 
     regions = root.xpath('//ns:TextRegion', namespaces=ns)
     for n, region in enumerate(regions):
-        s_print("[{}] Calculate skew of {}/{}".format(name, n, len(regions)))
+        s_print(f"[{name}] Calculate skew of {n}/{len(regions)}")
 
         # Read coords
         for c in region.xpath("./ns:Coords", namespaces=ns) + region.xpath("./Coords"):
@@ -50,7 +50,7 @@ def pagexmlskewestimate(xmlfile: str, imgpath: str, from_scratch: bool = False, 
                                                  skewsteps=skewsteps)
             region.set('orientation', str(orientation))
 
-    s_print("[{}] Add all orientations in annotation file".format(name))
+    s_print(f"[{name}] Add all orientations in annotation file")
     xmlstring = etree.tounicode(root.getroottree())
     no_lines_segm = int(root.xpath("count(//TextLine)"))
     return xmlstring, no_lines_segm
