@@ -350,7 +350,7 @@ def pagexmllineseg(xmlfile: str,
 
         if len(coords) < 3:
             continue
-        cropped, [minX, minY, maxX, maxY] = imgmanipulate.cutout(im, coords)
+        cropped, [min_x, min_y, max_x, max_y] = imgmanipulate.cutout(im, coords)
 
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
@@ -397,7 +397,7 @@ def pagexmllineseg(xmlfile: str,
                 if coordmap[c]["type"] == "drop-capital":
                     coordstrg = coordmap[c]["coordstring"]
                 else:
-                    coords = ((x + minX, y + minY) for x, y in poly)
+                    coords = ((x + min_x, y + min_y) for x, y in poly)
                     coordstrg = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
 
                 textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
