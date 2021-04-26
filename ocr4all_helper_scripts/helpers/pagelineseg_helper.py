@@ -10,6 +10,12 @@
 # kraken:
 #   https://github.com/mittagessen/kraken
 
+from ocr4all_helper_scripts.lib import imgmanipulate, morph, sl, pseg, nlbin
+from ocr4all_helper_scripts.utils.datastructures import Record
+
+import os
+import sys
+
 import numpy as np
 from skimage.measure import find_contours, approximate_polygon
 from skimage.draw import line_aa
@@ -18,10 +24,6 @@ import math
 
 from lxml import etree
 from PIL import Image, ImageDraw
-from ocr4all_helper_scripts.lib import imgmanipulate, morph, sl, pseg, nlbin
-
-import os
-import sys
 
 # Add printing for every thread
 from threading import Lock
@@ -35,11 +37,6 @@ def s_print(*a, **b):
 
 def s_print_error(*objs):
     s_print("ERROR: ", *objs, file=sys.stderr)
-
-
-class record(object):
-    def __init__(self, **kw):
-        self.__dict__.update(kw)
 
 
 # Given a line segmentation map, computes a list
@@ -59,7 +56,7 @@ def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, f
         if np.amax(mask) == 0:
             continue
 
-        result = record()
+        result = Record()
         result.label = i+1
         result.bounds = o
         polygon = []
