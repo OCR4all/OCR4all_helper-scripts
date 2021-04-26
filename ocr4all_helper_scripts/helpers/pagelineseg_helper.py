@@ -28,6 +28,7 @@ from PIL import Image, ImageDraw
 
 # Add printing for every thread
 from threading import Lock
+
 s_print_lock = Lock()
 
 
@@ -52,23 +53,23 @@ def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[float, float],
     for i, o in enumerate(lobjects):
         if o is None:
             continue
-        if sl.dim1(o) < 2*scale*filter_strength or sl.dim0(o) < scale*filter_strength:
+        if sl.dim1(o) < 2 * scale * filter_strength or sl.dim0(o) < scale * filter_strength:
             continue
-        mask = (segmentation[o] == i+1)
+        mask = (segmentation[o] == i + 1)
         if np.amax(mask) == 0:
             continue
 
         result = Record()
-        result.label = i+1
+        result.label = i + 1
         result.bounds = o
         polygon = []
-        if ((segmentation[o] != 0) == (segmentation[o] != i+1)).any():
+        if ((segmentation[o] != 0) == (segmentation[o] != i + 1)).any():
             ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
             ppoints = ppoints[1:] if ppoints else []
-            polygon = [(o[1].start+x, o[0].start+y) for x, y in ppoints]
+            polygon = [(o[1].start + x, o[0].start + y) for x, y in ppoints]
         if not polygon:
-            polygon = [(o[1].start, o[0].start), (o[1].stop,  o[0].start),
-                       (o[1].stop,  o[0].stop),  (o[1].start, o[0].stop)]
+            polygon = [(o[1].start, o[0].start), (o[1].stop, o[0].start),
+                       (o[1].stop, o[0].stop), (o[1].start, o[0].stop)]
         result.polygon = polygon
         result.mask = mask
         lines.append(result)
@@ -80,20 +81,20 @@ def compute_gradmaps(binary: np.array, scale: float, vscale: float = 1.0, hscale
                      usegauss: bool = False) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     # use gradient filtering to find baselines
     boxmap = pseg.compute_boxmap(binary, scale)
-    cleaned = boxmap*binary
+    cleaned = boxmap * binary
     if usegauss:
         # this uses Gaussians
-        grad = gaussian_filter(1.0*cleaned, (vscale*0.3*scale, hscale*6*scale), order=(1, 0))
+        grad = gaussian_filter(1.0 * cleaned, (vscale * 0.3 * scale, hscale * 6 * scale), order=(1, 0))
     else:
         # this uses non-Gaussian oriented filters
-        grad = gaussian_filter(1.0*cleaned, (max(4, vscale*0.3*scale), hscale*scale), order=(1, 0))
-        grad = uniform_filter(grad, (vscale, hscale*6*scale))
+        grad = gaussian_filter(1.0 * cleaned, (max(4, vscale * 0.3 * scale), hscale * scale), order=(1, 0))
+        grad = uniform_filter(grad, (vscale, hscale * 6 * scale))
 
     def norm_max(a):
-        return a/np.amax(a)
+        return a / np.amax(a)
 
-    bottom = norm_max((grad<0)*(-grad))
-    top = norm_max((grad > 0)*grad)
+    bottom = norm_max((grad < 0) * (-grad))
+    top = norm_max((grad > 0) * grad)
     return bottom, top, boxmap
 
 
@@ -119,20 +120,20 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float
         while len(contours) > 1:
             # Get bounds with dimensions
             bounds = [boundary(contour) for contour in contours]
-            widths = [b[1]-b[0] for b in bounds]
-            heights = [b[3]-b[2] for b in bounds]
+            widths = [b[1] - b[0] for b in bounds]
+            heights = [b[3] - b[2] for b in bounds]
 
             # Calculate x and y median distances (or at least 1)
             width_median = sorted(widths)[int(len(widths) / 2)]
             height_median = sorted(heights)[int(len(heights) / 2)]
 
             # Calculate x and y smear distance
-            smear_distance_x = math.ceil(width_median*smear_strength[0] * (iteration*growth[0]))
-            smear_distance_y = math.ceil(height_median*smear_strength[1] * (iteration*growth[1]))
+            smear_distance_x = math.ceil(width_median * smear_strength[0] * (iteration * growth[0]))
+            smear_distance_y = math.ceil(height_median * smear_strength[1] * (iteration * growth[1]))
 
             # Smear image in x and y direction
             height, width = work_image.shape
-            gaps_current_x = [float('Inf')]*height
+            gaps_current_x = [float('Inf')] * height
             for x in range(width):
                 gap_current_y = float('Inf')
                 for y in range(height):
@@ -142,11 +143,11 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float
 
                         if gap_current_y < smear_distance_y and gap_current_y > 0:
                             # Draw over
-                            work_image[y-gap_current_y:y, x] = True
-                        
+                            work_image[y - gap_current_y:y, x] = True
+
                         if gap_current_x < smear_distance_x and gap_current_x > 0:
                             # Draw over
-                            work_image[y, x-gap_current_x:x] = True
+                            work_image[y, x - gap_current_x:x] = True
 
                         gap_current_y = 0
                         gaps_current_x[y] = 0
@@ -167,14 +168,14 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float
                     sorted_y = sorted(contour, key=lambda c: c[1])
                     extreme_points.append((tuple(sorted_x[0]), tuple(sorted_y[0]),
                                            tuple(sorted_x[-1]), tuple(sorted_y[-1])))
-                
+
                 sorted_extreme = sorted(extreme_points, key=lambda e: e)
                 for c1, c2 in zip(sorted_extreme, sorted_extreme[1:]):
                     for p1 in c1:
                         nearest = None
                         nearest_dist = math.inf
                         for p2 in c2:
-                            distance = math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+                            distance = math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
                             if distance < nearest_dist:
                                 nearest = p2
                                 nearest_dist = distance
@@ -189,9 +190,9 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float
                 contours = find_contours(work_image, 0.5, fully_connected="low")
 
             iteration += 1
-        return [(p[1]-padding, p[0]-padding) for p in approximate_polygon(contours[0], 0.1)]
+        return [(p[1] - padding, p[0] - padding) for p in approximate_polygon(contours[0], 0.1)]
     return []
-    
+
 
 def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blackseps: int = 10, max_whiteseps: int = 3,
             minheight_whiteseps: int = 10, filter_strength: float = 1.0,
@@ -209,11 +210,11 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
-    im_rotated = im.rotate(-1*orientation, expand=True)
+    im_rotated = im.rotate(-1 * orientation, expand=True)
 
     a = np.array(im_rotated.convert('L')) if im_rotated.mode == '1' else np.array(im_rotated)
 
-    binary = np.array(a > 0.5*(np.amin(a) + np.amax(a)), 'i')
+    binary = np.array(a > 0.5 * (np.amin(a) + np.amax(a)), 'i')
     binary = 1 - binary
 
     if not scale:
@@ -238,8 +239,8 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
     seeds = pseg.compute_line_seeds(binary, bottom, top, colseps, scale, threshold=threshold)
     llabels1 = morph.propagate_labels(boxmap, seeds, conflict=0)
     spread = morph.spread_labels(seeds, maxdist=scale)
-    llabels = np.where(llabels1 > 0, llabels1, spread*binary)
-    segmentation = llabels*binary
+    llabels = np.where(llabels1 > 0, llabels1, spread * binary)
+    segmentation = llabels * binary
 
     if np.amax(segmentation) > maxlines:
         s_print_error(f"too many lines {np.amax(segmentation)}")
@@ -253,22 +254,22 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
                                        filter_strength)
 
     # Translate each point back to original
-    deltaX = (im_rotated.width - im.width) / 2
-    deltaY = (im_rotated.height - im.height) / 2
-    centerX = im_rotated.width / 2
-    centerY = im_rotated.height / 2
+    delta_x = (im_rotated.width - im.width) / 2
+    delta_y = (im_rotated.height - im.height) / 2
+    center_x = im_rotated.width / 2
+    center_y = im_rotated.height / 2
 
     def translate_back(point):
         # rotate point around center
-        orient_rad = -1*orientation * (math.pi / 180)
-        rotatedX = ((point[0]-centerX) * math.cos(orient_rad)
-                    - (point[1]-centerY) * math.sin(orient_rad)
-                    + centerX)
-        rotatedY = ((point[0]-centerX) * math.sin(orient_rad)
-                    + (point[1]-centerY) * math.cos(orient_rad)
-                    + centerY)
+        orient_rad = -1 * orientation * (math.pi / 180)
+        rotated_x = ((point[0] - center_x) * math.cos(orient_rad)
+                     - (point[1] - center_y) * math.sin(orient_rad)
+                     + center_x)
+        rotated_y = ((point[0] - center_x) * math.sin(orient_rad)
+                     + (point[1] - center_y) * math.cos(orient_rad)
+                     + center_y)
         # move point
-        return int(rotatedX-deltaX), int(rotatedY-deltaY)
+        return int(rotated_x - delta_x), int(rotated_y - delta_y)
 
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
@@ -309,7 +310,7 @@ def pagexmllineseg(xmlfile: str,
             cx = point.attrib["x"]
             cy = point.attrib["y"]
             c.remove(point)
-            cc.append(cx+","+cy)
+            cc.append(cx + "," + cy)
         c.attrib["points"] = " ".join(cc)
 
     coordmap = {}
@@ -354,8 +355,8 @@ def pagexmllineseg(xmlfile: str,
         if 'orientation' in coordmap[c]:
             orientation = coordmap[c]['orientation']
         else:
-            orientation = -1*nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
-                                                 skewsteps=skewsteps)
+            orientation = -1 * nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
+                                                   skewsteps=skewsteps)
             s_print(f"[{name}] Skew estimate between +/-{maxskew} in {skewsteps} steps. Estimated {orientation}°")
 
         if cropped is not None:
@@ -382,29 +383,28 @@ def pagexmllineseg(xmlfile: str,
         else:
             lines = []
 
-
         # Interpret whole region as textline if no textlines are found
         if not lines or len(lines) == 0:
-            coordstrg = " ".join([str(x)+","+str(y) for x, y in coords])
-            textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+            coordstrg = " ".join([str(x) + "," + str(y) for x, y in coords])
+            textregion = root.xpath('//ns:TextRegion[@id="' + c + '"]', namespaces=ns)[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": "{}_l{:03d}".format(c, n+1)})
+                                       attrib={"id": "{}_l{:03d}".format(c, n + 1)})
             etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
         else:
             for n, poly in enumerate(lines):
                 if coordmap[c]["type"] == "drop-capital":
                     coordstrg = coordmap[c]["coordstring"]
                 else:
-                    coords = ((x+minX, y+minY) for x, y in poly)
-                    coordstrg = " ".join([str(int(x))+","+str(int(y)) for x, y in coords])
+                    coords = ((x + minX, y + minY) for x, y in poly)
+                    coordstrg = " ".join([str(int(x)) + "," + str(int(y)) for x, y in coords])
 
-                textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
+                textregion = root.xpath('//ns:TextRegion[@id="' + c + '"]', namespaces=ns)[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
-                                           attrib={"id": "{}_l{:03d}".format(c, n+1)})
+                                           attrib={"id": "{}_l{:03d}".format(c, n + 1)})
                 etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
     s_print(f"[{name}] Generate new PAGE XML with text lines")
@@ -413,4 +413,3 @@ def pagexmllineseg(xmlfile: str,
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
     no_lines_segm = int(root.xpath("count(//TextLine)"))
     return xmlstring, no_lines_segm
-
