@@ -1,20 +1,34 @@
 from setuptools import setup, find_packages
 
-setup(name='ocr4all_helpers',
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
+setup(name='ocr4all_helper_scripts',
       version='0.3.2',
       description='Different python scripts used in the OCR4all workflow.',
+      long_description=long_description,
       url='https://github.com/OCR4all/OCR4all_helper-scripts',
       author='Nico Balbach, Maximilian Nöth',
-      author_email='nico.balbach@informatik.uni-wuerzburg.de, maximilian.noeth@protonmail.com',
+      author_email='nico.balbach@informatik.uni-wuerzburg.de, maximilian.noeth@uni-wuerzburg.de',
       packages=find_packages(),
-      license='GPL-v3.0',
+      license="MIT License",
       entry_points={
             'console_scripts': [
-                  'pagelineseg=ocr4all_helpers.pagelineseg:cli',
-                  'skewestimate=ocr4all_helpers.skewestimate:cli',
-                  'pagedir2pagexml=ocr4all_helpers.pagedir2pagexml:main',
-                  'legacy_convert=ocr4all_helpers.legacyconvert:main'
-            ],
+                  'ocr4all-helper-scripts = ocr4all_helper_scripts.cli: cli'
+            ]
       },
-      install_requires=open("requirements.txt").read().split(),
-      zip_safe=False)
+      classifiers=[
+            "Programming Language :: Python :: 3",
+            "License :: OSI Approved :: MIT License",
+            "Operating System :: OS Independent",
+      ],
+      install_requires=[
+            "click",
+            "numpy",
+            "lxml",
+            "scikit-image",
+            "Pillow"
+      ],
+      keywords=["OCR", "optical character recognition"],
+      zip_safe=False
+      )
