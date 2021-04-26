@@ -8,7 +8,7 @@
 # dependencies like matplotlib.
 import numpy as np
 from scipy.ndimage.filters import gaussian_filter, uniform_filter, maximum_filter
-from ocr4all_helpers.lib import morph, sl
+from ocr4all_helper_scripts.lib import morph, sl
 
 
 # Computes column separators either from vertical black lines or whitespace.

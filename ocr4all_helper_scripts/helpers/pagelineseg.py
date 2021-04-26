@@ -18,7 +18,7 @@ import math
 
 from lxml import etree
 from PIL import Image, ImageDraw
-from ocr4all_helpers.lib import imgmanipulate, morph, sl, pseg, nlbin
+from ocr4all_helper_scripts.lib import imgmanipulate, morph, sl, pseg, nlbin
 
 from multiprocessing.pool import ThreadPool
 import json

@@ -2,7 +2,7 @@
 # Skew estimate script for regions of images with PAGE xml.
 from lxml import etree
 from PIL import Image
-from ocr4all_helpers.lib import imgmanipulate, nlbin
+from ocr4all_helper_scripts.lib import imgmanipulate, nlbin
 
 from multiprocessing.pool import ThreadPool
 import json
