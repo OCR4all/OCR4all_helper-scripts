@@ -12,9 +12,9 @@ from threading import Lock
 s_print_lock = Lock()
 
 
-def s_print(*a, **b):
+def s_print(*args, **kwargs):
     with s_print_lock:
-        print(*a, **b)
+        print(*args, **kwargs)
 
 
 def pagexmlskewestimate(xmlfile: str, imgpath: str, from_scratch: bool = False, maxskew: int = 2, skewsteps: int = 8):
