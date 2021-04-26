@@ -310,7 +310,7 @@ def pagexmllineseg(xmlfile: str,
             cx = point.attrib["x"]
             cy = point.attrib["y"]
             c.remove(point)
-            cc.append(cx + "," + cy)
+            cc.append(f"{cx},{cy}")
         c.attrib["points"] = " ".join(cc)
 
     coordmap = {}
@@ -385,8 +385,8 @@ def pagexmllineseg(xmlfile: str,
 
         # Interpret whole region as textline if no textlines are found
         if not lines or len(lines) == 0:
-            coordstrg = " ".join([str(x) + "," + str(y) for x, y in coords])
-            textregion = root.xpath('//ns:TextRegion[@id="' + c + '"]', namespaces=ns)[0]
+            coordstrg = " ".join([f"{x},{y}" for x, y in coords])
+            textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
@@ -398,9 +398,9 @@ def pagexmllineseg(xmlfile: str,
                     coordstrg = coordmap[c]["coordstring"]
                 else:
                     coords = ((x + minX, y + minY) for x, y in poly)
-                    coordstrg = " ".join([str(int(x)) + "," + str(int(y)) for x, y in coords])
+                    coordstrg = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
 
-                textregion = root.xpath('//ns:TextRegion[@id="' + c + '"]', namespaces=ns)[0]
+                textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
