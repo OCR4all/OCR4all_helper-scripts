@@ -17,7 +17,7 @@ def s_print(*a, **b):
         print(*a, **b)
 
 
-def pagexmlskewestimate(xmlfile, imgpath, from_scratch=False, maxskew=2, skewsteps=8):
+def pagexmlskewestimate(xmlfile: str, imgpath: str, from_scratch: bool = False, maxskew: int = 2, skewsteps: int = 8):
     name = os.path.splitext(os.path.split(imgpath)[-1])[0]
     s_print("""Start process for '{}'
         |- Image: '{}'
