@@ -1,5 +1,0 @@
-numpy
-lxml
-scikit-image
-Pillow
-argparse

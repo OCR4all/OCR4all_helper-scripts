@@ -18,12 +18,7 @@ import math
 
 from lxml import etree
 from PIL import Image, ImageDraw
-from ocr4all_helpers.lib import imgmanipulate, morph, sl, pseg, nlbin
-
-from multiprocessing.pool import ThreadPool
-import json
-
-import argparse
+from ocr4all_helper_scripts.lib import imgmanipulate, morph, sl, pseg, nlbin
 
 import os
 import sys
@@ -52,7 +47,7 @@ class record(object):
 #
 # Implementation derived from ocropy with changes to allow extracting
 # the line coords/polygons
-def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength=1.0):
+def compute_lines(segmentation, smear_strength, scale, growth, max_iterations, filter_strength):
     lobjects = morph.find_objects(segmentation)
     lines = []
     for i, o in enumerate(lobjects):
@@ -198,13 +193,9 @@ def approximate_smear_polygon(line_mask, smear_strength=(1, 2), growth=(1.1, 1.1
     return []
     
 
-def segment(im, scale=None,
-            max_blackseps=0, widen_blackseps=10,
-            max_whiteseps=3, minheight_whiteseps=10,
-            smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0,
-            fail_save_iterations=1000, vscale=1.0, hscale=1.0,
-            minscale=12.0, maxlines=300,
-            threshold=0.2, usegauss=False):
+def segment(im, scale=None, max_blackseps=0, widen_blackseps=10, max_whiteseps=3, minheight_whiteseps=10,
+            filter_strength=1.0, smear_strength=(1, 2), growth=(1.1, 1.1), orientation=0, fail_save_iterations=1000,
+            vscale=1.0, hscale=1.0, minscale=12.0, maxlines=300, threshold=0.2, usegauss=False):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -256,7 +247,8 @@ def segment(im, scale=None,
                                        smear_strength,
                                        scale,
                                        growth,
-                                       fail_save_iterations)
+                                       fail_save_iterations,
+                                       filter_strength)
 
     # Translate each point back to original
     deltaX = (im_rotated.width - im.width) / 2
@@ -291,6 +283,7 @@ def pagexmllineseg(xmlfile, imgpath,
                    maxlines=300,
                    smear_strength=(1, 2),
                    growth=(1.1, 1.1),
+                   filter_strength=1.0,
                    fail_save_iterations=100,
                    maxskew=2.0,
                    skewsteps=8,
@@ -376,6 +369,7 @@ def pagexmllineseg(xmlfile, imgpath,
                                 widen_blackseps=widen_blackseps,
                                 max_whiteseps=max_whiteseps,
                                 minheight_whiteseps=minheight_whiteseps,
+                                filter_strength=filter_strength,
                                 smear_strength=smear_strength, growth=growth,
                                 orientation=orientation,
                                 fail_save_iterations=fail_save_iterations,
@@ -387,7 +381,7 @@ def pagexmllineseg(xmlfile, imgpath,
             lines = []
 
 
-        # Iterpret whole region as textline if no textline are found
+        # Interpret whole region as textline if no textlines are found
         if not lines or len(lines) == 0:
             coordstrg = " ".join([str(x)+","+str(y) for x, y in coords])
             textregion = root.xpath('//ns:TextRegion[@id="'+c+'"]', namespaces=ns)[0]
@@ -418,221 +412,3 @@ def pagexmllineseg(xmlfile, imgpath,
     no_lines_segm = int(root.xpath("count(//TextLine)"))
     return xmlstring, no_lines_segm
 
-
-# Command line interface for the pagelineseg script
-def cli():
-    parser = argparse.ArgumentParser("""
-    Line segmentation with regions read from a PAGE xml file
-    """)
-    # input
-    g_in = parser.add_argument_group('input')
-    g_in.add_argument('DATASET',
-                      type=str,
-                      help=('Path to the input dataset in json format with '
-                            'a list of image path, pagexml path and optional'
-                            ' output path. (Will overwrite pagexml if no '
-                            'output path is given)')
-                      )
-    g_in.add_argument('--remove_images',
-                      action='store_true',
-                      help=('Remove ImageRegions from the image before '
-                            'processing TextRegions for TextLines. Can be used'
-                            ' if ImageRegions overlap with TextRegions'
-                            'default: %(default)s')
-                      )
-
-    # limits
-    g_limit = parser.add_argument_group('limit parameters')
-    g_limit.add_argument('--minscale',
-                         type=float,
-                         default=12.0,
-                         help='minimum scale permitted, default: %(default)s'
-                         )
-    g_limit.add_argument('--maxlines',
-                         type=float,
-                         default=300,
-                         help='maximum # lines permitted, default: %(default)s'
-                         )
-
-    # line parameters
-    g_line = parser.add_argument_group('line parameters')
-    g_line.add_argument('--threshold',
-                        type=float,
-                        default=0.2,
-                        help='baseline threshold, default: %(default)s'
-                        )
-    g_line.add_argument('--usegauss',
-                        action='store_true',
-                        help=('use gaussian instead of uniform, '
-                              'default: %(default)s')
-                        )
-
-    # scale parameters
-    g_scale = parser.add_argument_group('scale parameters')
-    g_scale.add_argument('-s', '--scale',
-                         type=float,
-                         default=None,
-                         help=('Scale of the input image used for the line'
-                               'segmentation. Will be estimated if '
-                               'not defined, 0 or smaller.')
-                         )
-    g_scale.add_argument('--hscale',
-                         type=float,
-                         default=1.0,
-                         help=('Non-standard scaling of horizontal parameters.'
-                               ' (default: %(default)s)')
-                         )
-    g_scale.add_argument('--vscale',
-                         type=float,
-                         default=1.0,
-                         help=('non-standard scaling of vertical parameters. '
-                               '(default: %(default)s)')
-                         )
-    g_scale.add_argument('--filter_strength',
-                         type=float,
-                         default=1.0,
-                         help=('Strength individual characters are filtered out '
-                               'when creating a textline, default: %(default)s')
-                         )
-
-    # region skew estimate
-    g_skew = parser.add_argument_group('skew estimate parameters')
-    g_skew.add_argument('-m', '--maxskew',
-                        type=float,
-                        default=2.0,
-                        help='Maximal estimated skew of an image.'
-                        )
-    g_skew.add_argument('--skewsteps',
-                        type=int,
-                        default=8,
-                        help=('Steps between 0 and +maxskew/-maxskew to '
-                              'estimate the possible skew of a region. Higher '
-                              'values will be more precise but will also take '
-                              'longer.')
-                        )
-
-    # line extraction
-    g_ext = parser.add_argument_group('extraction parameters')
-    g_ext.add_argument('-p', '--parallel',
-                       type=int,
-                       default=1,
-                       help=('Number of threads parallely working on images. '
-                             '(default:%(default)s)')
-                       )
-    g_ext.add_argument('-x', '--smearX',
-                       type=float,
-                       default=2,
-                       help=('Smearing strength in X direction for the '
-                             'algorithm calculating the textline polygon '
-                             'wrapping all contents. (default:%(default)s)')
-                       )
-    g_ext.add_argument('-y', '--smearY',
-                       type=float,
-                       default=1,
-                       help=('Smearing strength in Y direction for the '
-                             'algorithm calculating the textline polygon '
-                             'wrapping all contents. (default:%(default)s)')
-                       )
-    g_ext.add_argument('--growthX',
-                       type=float,
-                       default=1.1,
-                       help=('Growth in X direction for every iteration of '
-                             'the Textline polygon finding. Will speed up the '
-                             'algorithm at the cost of precision. '
-                             '(default: %(default)s)')
-                       )
-    g_ext.add_argument('--growthY',
-                       type=float,
-                       default=1.1,
-                       help=('Growth in Y direction for every iteration of '
-                             'the Textline polygon finding. Will speed up the '
-                             'algorithm at the cost of precision. '
-                             '(default: %(default)s)')
-                       )
-    g_ext.add_argument('--fail_save',
-                       type=int,
-                       default=1000,
-                       help=('Fail save to counter infinite loops when '
-                             'combining contours to a precise textlines. '
-                             'Will connect remaining contours with lines. '
-                             '(default: %(default)s)')
-                       )
-
-    # column parameters
-    g_colb = parser.add_argument_group('Black column parameters')
-    g_colb.add_argument('--max_blackseps', '--maxseps',
-                        # --maxseps to be consistent with ocropy
-                        type=int,
-                        default=0,
-                        help=('Maximum # black column separators, '
-                              'default: %(default)s')
-                        )
-    g_colb.add_argument('--widen_blackseps', '--sepwiden',
-                        # --sepwiden to be consistent with ocropy
-                        type=int,
-                        default=10,
-                        help=('Widen black separators (to account for warping),'
-                              ' default: %(default)s')
-                        )
-    g_colw = parser.add_argument_group('White column parameters')
-    g_colw.add_argument('--max_whiteseps', '--maxcolseps',
-                        # --maxcolseps to be consistent with ocropy
-                        type=int,
-                        default=-1,
-                        help=('Maximum # whitespace column separators. '
-                              '(default: %(default)s)')
-                        )
-    g_colw.add_argument('--minheight_whiteseps', '--csminheight',
-                        # --csminheight to be consistent with ocropy
-                        type=float,
-                        default=10,
-                        help=('minimum column height (units=scale), '
-                              'default: %(default)s')
-                        )
-                    
-    args = parser.parse_args()
-
-    with open(args.DATASET, 'r') as data_file:
-        dataset = json.load(data_file)
-
-    # Parallel processes for the pagexmllineseg cli
-    def parallel(data):
-        if len(data) == 3:
-            image, pagexml, path_out = data
-        elif len(data) == 2:
-            image, pagexml = data
-            path_out = pagexml
-        else:
-            raise ValueError("Invalid data line with length {} "
-                             "instead of 2 or 3".format(len(data)))
-
-        xml_output, _ = pagexmllineseg(pagexml, image,
-                                       scale=args.scale,
-                                       vscale=args.vscale,
-                                       hscale=args.hscale,
-                                       max_blackseps=args.max_blackseps,
-                                       widen_blackseps=args.widen_blackseps,
-                                       max_whiteseps=args.max_whiteseps,
-                                       minheight_whiteseps=args.minheight_whiteseps,
-                                       minscale=args.minscale,
-                                       maxlines=args.maxlines,
-                                       smear_strength=(args.smearX, args.smearY),
-                                       growth=(args.growthX, args.growthY),
-                                       fail_save_iterations=args.fail_save,
-                                       maxskew=args.maxskew,
-                                       skewsteps=args.skewsteps,
-                                       usegauss=args.usegauss,
-                                       remove_images=args.remove_images)
-        with open(path_out, 'w+') as output_file:
-            s_print("Save annotations into '{}'".format(path_out))
-            output_file.write(xml_output)
-    
-    s_print("Process {} images, with {} in parallel".format(len(dataset), args.parallel))
-
-    # Pool of all parallel processed pagexmllineseg
-    with ThreadPool(processes=min(args.parallel, len(dataset))) as pool:
-        pool.map(parallel, dataset)
-
-
-if __name__ == "__main__":
-    cli()
