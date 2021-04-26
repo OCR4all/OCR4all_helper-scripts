@@ -1,5 +1,4 @@
 from pathlib import Path
-import argparse
 from typing import Dict, List, Tuple
 
 from lxml import etree
@@ -175,20 +174,3 @@ def write_xml(file: Path, tree: etree.Element):
     """
     with file.open("w") as outfile:
         outfile.write(etree.tostring(tree, encoding="unicode"))
-
-
-def main():
-    parser = argparse.ArgumentParser("""
-    Convert legacy OCR4all projects to latest.
-    """)
-    parser.add_argument('-p', '--path', type=str, required=True, help='Path to the OCR4all project.')
-
-    args = parser.parse_args()
-
-    for xml in sorted(list(Path(args.path).glob("*.xml"))):
-        updated_page = convert_page(xml)
-        write_xml(xml, updated_page)
-
-
-if __name__ == "__main__":
-    main()
