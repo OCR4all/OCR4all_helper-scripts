@@ -11,8 +11,9 @@ from scipy.ndimage.filters import gaussian_filter, uniform_filter, maximum_filte
 from ocr4all_helper_scripts.lib import morph, sl
 
 
-# Computes column separators either from vertical black lines or whitespace.
 def compute_colseps(binary, scale, max_blackseps, widen_blackseps, max_whiteseps, minheight_whiteseps):
+    """Computes column separators either from vertical black lines or whitespace.
+    """
     colseps = compute_colseps_conv(binary, scale,
                                    minheight_whiteseps=minheight_whiteseps,
                                    max_whiteseps=max_whiteseps)
@@ -38,8 +39,9 @@ def compute_boxmap(binary, scale, threshold=(.5, 4), dtype='i'):
     return boxmap
 
 
-# Find column separators by convolution and thresholding.
 def compute_colseps_conv(binary, scale=1.0, minheight_whiteseps=10, max_whiteseps=3):
+    """Find column separators by convolution and thresholding.
+    """
     h, w = binary.shape
     # find vertical whitespace by thresholding
     smoothed = gaussian_filter(1.0*binary, (scale, scale*0.5))
@@ -58,8 +60,9 @@ def compute_colseps_conv(binary, scale=1.0, minheight_whiteseps=10, max_whitesep
     return seps
 
 
-# Finds vertical black lines corresponding to column separators.
 def compute_separators_morph(binary, scale, max_blackseps=0, widen_blackseps=10):
+    """Finds vertical black lines corresponding to column separators.
+    """
     d0 = int(max(5, scale/4))
     d1 = int(max(5, scale))+widen_blackseps
     thick = morph.r_dilation(binary, (d0, d1))
@@ -70,8 +73,9 @@ def compute_separators_morph(binary, scale, max_blackseps=0, widen_blackseps=10)
     return vert
 
 
-# Estimate the scale factor of a binary image
 def estimate_scale(binary):
+    """Estimate the scale factor of a binary image
+    """
     objects = binary_objects(binary)
     bysize = sorted(objects, key=sl.area)
     scalemap = np.zeros(binary.shape)
