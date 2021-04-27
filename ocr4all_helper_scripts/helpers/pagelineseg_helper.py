@@ -12,8 +12,9 @@
 
 from ocr4all_helper_scripts.lib import imgmanipulate, morph, sl, pseg, nlbin
 from ocr4all_helper_scripts.utils.datastructures import Record
+from ocr4all_helper_scripts.utils import pageutils, imageutils
 
-import os
+from pathlib import Path
 import sys
 from typing import List, Tuple
 
@@ -24,7 +25,7 @@ from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
 
 from lxml import etree
-from PIL import Image, ImageDraw
+from PIL import Image
 
 # Add printing for every thread
 from threading import Lock
@@ -295,67 +296,38 @@ def pagexmllineseg(xmlfile: str,
                    skewsteps: int = 8,
                    usegauss: bool = False,
                    remove_images: bool = False):
-    name = os.path.splitext(os.path.split(imgpath)[-1])[0]
+
+    name = Path(imgpath).name.split(".")[-1]
     s_print(f"""Start process for '{name}'
         |- Image: '{imgpath}'
         |- Annotations: '{xmlfile}' """)
 
-    root = etree.parse(xmlfile).getroot()
-    ns = {"ns": root.nsmap[None]}
+    root = pageutils.get_root(xmlfile)
+    ns_map = pageutils.autoextract_namespace(root)
 
     s_print(f"[{name}] Retrieve TextRegions")
 
-    # convert point notation from older pagexml versions
-    for c in root.xpath("//ns:Coords[not(@points)]", namespaces=ns):
-        cc = []
-        for point in c.xpath("./ns:Point", namespaces=ns):
-            cx = point.attrib["x"]
-            cy = point.attrib["y"]
-            c.remove(point)
-            cc.append(f"{cx},{cy}")
-        c.attrib["points"] = " ".join(cc)
+    pageutils.convert_point_notation(root, ns_map)
 
-    coordmap = {}
-    for r in root.xpath('//ns:TextRegion', namespaces=ns):
-        rid = r.attrib["id"]
-        coordmap[rid] = {"type": r.attrib.get("type", "TextRegion")}
-        coordmap[rid]["coords"] = []
-        for c in r.xpath("./ns:Coords", namespaces=ns) + r.xpath("./Coords"):
-            coordmap[rid]["coordstring"] = c.attrib["points"]
-            coordstrings = [x.split(",") for x in c.attrib["points"].split()]
-            coordmap[rid]["coords"] += [[int(x[0]), int(x[1])]
-                                        for x in coordstrings]
-        if 'orientation' in r.attrib:
-            coordmap[rid]["orientation"] = float(r.attrib["orientation"])
+    coordmap = pageutils.construct_coordmap(root, ns_map)
 
     s_print(f"[{name}] Extract Textlines from TextRegions")
+
     im = Image.open(imgpath)
 
     if remove_images:
-        # Draw white over ImageRegions
-        white = {
-            "1": 1, "L": 255, "P": 255,
-            "RGB": (255, 255, 255), "RGBA": (255, 255, 255, 255),
-            "CMYK": (0, 0, 0, 0), "YCbCr": (1, 0, 0),
-            "Lab": (100, 0, 0), "HSV": (0, 0, 100)
-        }[im.mode]
-        draw = ImageDraw.Draw(im)
-        for r in root.xpath('//ns:ImageRegion', namespaces=ns):
-            for c in r.xpath("./ns:Coords", namespaces=ns) + r.xpath("./Coords"):
-                coordstrings = [x.split(",") for x in c.attrib["points"].split()]
-                poly = [(int(x[0]), int(x[1])) for x in coordstrings]
-                draw.polygon(poly, fill=white)
-        del draw
+        imageutils.remove_images(im, root, ns_map)
 
-    for n, c in enumerate(sorted(coordmap)):
-        coords = coordmap[c]['coords']
+    for n, coord in enumerate(sorted(coordmap)):
+        coords = coordmap[coord]['coords']
 
         if len(coords) < 3:
             continue
+
         cropped, [min_x, min_y, max_x, max_y] = imgmanipulate.cutout(im, coords)
 
-        if 'orientation' in coordmap[c]:
-            orientation = coordmap[c]['orientation']
+        if coordmap[coord].get("orientation"):
+            orientation = coordmap[coord]['orientation']
         else:
             orientation = -1 * nlbin.estimate_skew(cropped, 0, maxskew=maxskew,
                                                    skewsteps=skewsteps)
@@ -365,11 +337,11 @@ def pagexmllineseg(xmlfile: str,
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
                 cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)).astype(np.uint8))
-            if coordmap[c]["type"] == "drop-capital":
+            if coordmap[coord]["type"] == "drop-capital":
                 lines = [1]
             else:
-                # if line in
-                lines = segment(cropped, scale=scale,
+                lines = segment(cropped,
+                                scale=scale,
                                 max_blackseps=max_blackseps,
                                 widen_blackseps=widen_blackseps,
                                 max_whiteseps=max_whiteseps,
@@ -385,33 +357,33 @@ def pagexmllineseg(xmlfile: str,
         else:
             lines = []
 
-        # Interpret whole region as textline if no textlines are found
+        # Interpret whole region as TextLine if no TextLines are found
         if not lines or len(lines) == 0:
             coordstrg = " ".join([f"{x},{y}" for x, y in coords])
-            textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
+            textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns_map)[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": "{}_l{:03d}".format(c, n + 1)})
+                                       attrib={"id": "{}_l{:03d}".format(coord, n + 1)})
             etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
         else:
             for n, poly in enumerate(lines):
-                if coordmap[c]["type"] == "drop-capital":
-                    coordstrg = coordmap[c]["coordstring"]
+                if coordmap[coord]["type"] == "drop-capital":
+                    coordstrg = coordmap[coord]["coordstring"]
                 else:
                     coords = ((x + min_x, y + min_y) for x, y in poly)
                     coordstrg = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
 
-                textregion = root.xpath(f'//ns:TextRegion[@id="{c}"]', namespaces=ns)[0]
+                textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns_map)[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
-                                           attrib={"id": "{}_l{:03d}".format(c, n + 1)})
+                                           attrib={"id": "{}_l{:03d}".format(coord, n + 1)})
                 etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
 
     s_print(f"[{name}] Generate new PAGE XML with text lines")
     xmlstring = etree.tounicode(root.getroottree()).replace(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2010-03-19",
-        "http://schema.primaresearch.org/PAGE/gts/pagecontent/2017-07-15")
+        "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
     no_lines_segm = int(root.xpath("count(//TextLine)"))
     return xmlstring, no_lines_segm
