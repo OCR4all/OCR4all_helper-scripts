@@ -296,27 +296,25 @@ def pagexmllineseg(xmlfile: str,
                    skewsteps: int = 8,
                    usegauss: bool = False,
                    remove_images: bool = False):
-
     name = Path(imgpath).name.split(".")[-1]
     s_print(f"""Start process for '{name}'
         |- Image: '{imgpath}'
         |- Annotations: '{xmlfile}' """)
 
     root = pageutils.get_root(xmlfile)
-    ns_map = pageutils.autoextract_namespace(root)
 
     s_print(f"[{name}] Retrieve TextRegions")
 
-    pageutils.convert_point_notation(root, ns_map)
+    pageutils.convert_point_notation(root)
 
-    coordmap = pageutils.construct_coordmap(root, ns_map)
+    coordmap = pageutils.construct_coordmap(root)
 
     s_print(f"[{name}] Extract Textlines from TextRegions")
 
     im = Image.open(imgpath)
 
     if remove_images:
-        imageutils.remove_images(im, root, ns_map)
+        imageutils.remove_images(im, root)
 
     for n, coord in enumerate(sorted(coordmap)):
         coords = coordmap[coord]['coords']
@@ -360,7 +358,7 @@ def pagexmllineseg(xmlfile: str,
         # Interpret whole region as TextLine if no TextLines are found
         if not lines or len(lines) == 0:
             coordstrg = " ".join([f"{x},{y}" for x, y in coords])
-            textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns_map)[0]
+            textregion = root.xpath(f'//{{*}}:TextRegion[@id="{coord}"]')[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
@@ -374,7 +372,7 @@ def pagexmllineseg(xmlfile: str,
                     coords = ((x + min_x, y + min_y) for x, y in poly)
                     coordstrg = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
 
-                textregion = root.xpath(f'//ns:TextRegion[@id="{coord}"]', namespaces=ns_map)[0]
+                textregion = root.xpath(f'//{{*}}:TextRegion[@id="{coord}"]')[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
