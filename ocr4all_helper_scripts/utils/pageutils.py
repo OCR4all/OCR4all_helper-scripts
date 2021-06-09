@@ -24,7 +24,7 @@ def convert_point_notation(tree: etree.Element):
         coord.attrib["points"] = " ".join(cc)
 
 
-def construct_coordmap(tree: etree.Element, ns_map: Dict[str, str]) -> dict:
+def construct_coordmap(tree: etree.Element) -> dict:
     """Construct coordmap from PAGE XML tree which holds coordinate and orientation information for every
     TextRegion element"""
     coordmap = {}
