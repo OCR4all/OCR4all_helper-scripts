@@ -13,4 +13,4 @@ def legacyconvert_cli(path):
 
 
 if __name__ == "__main__":
-    main()
+    legacyconvert_cli()
