@@ -358,7 +358,7 @@ def pagexmllineseg(xmlfile: str,
         # Interpret whole region as TextLine if no TextLines are found
         if not lines or len(lines) == 0:
             coordstrg = " ".join([f"{x},{y}" for x, y in coords])
-            textregion = root.xpath(f'//{{*}}:TextRegion[@id="{coord}"]')[0]
+            textregion = root.xpath(f'//{{*}}TextRegion[@id="{coord}"]')[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
@@ -372,7 +372,7 @@ def pagexmllineseg(xmlfile: str,
                     coords = ((x + min_x, y + min_y) for x, y in poly)
                     coordstrg = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
 
-                textregion = root.xpath(f'//{{*}}:TextRegion[@id="{coord}"]')[0]
+                textregion = root.xpath(f'//{{*}}TextRegion[@id="{coord}"]')[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",

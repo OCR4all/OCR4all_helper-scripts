@@ -14,9 +14,9 @@ def convert_point_notation(tree: etree.Element):
     """Converts point notation from older PAGE XML versions to latest coords attribute notation
 
     """
-    for coord in tree.xpath("//{*}:Coords[not(@points)]"):
+    for coord in tree.xpath("//{*}Coords[not(@points)]"):
         cc = []
-        for point in coord.xpath("./{*}:Point"):
+        for point in coord.xpath("./{*}Point"):
             cx = point.attrib["x"]
             cy = point.attrib["y"]
             coord.remove(point)
@@ -29,12 +29,12 @@ def construct_coordmap(tree: etree.Element) -> dict:
     TextRegion element"""
     coordmap = {}
 
-    for text_region in tree.xpath('.//{*}:TextRegion'):
+    for text_region in tree.xpath('.//{*}TextRegion'):
         region_id = text_region.attrib["id"]
         coordmap[region_id] = {"type": text_region.attrib.get("type", "TextRegion")}
         coordmap[region_id]["coords"] = []
 
-        for c in text_region.xpath("./{*}:Coords") + text_region.xpath("./Coords"):
+        for c in text_region.xpath("./{*}Coords") + text_region.xpath("./Coords"):
             coordmap[region_id]["coordstring"] = c.attrib["points"]
             coordstrings = [x.split(",") for x in c.attrib["points"].split()]
             coordmap[region_id]["coords"] += [[int(x[0]), int(x[1])] for x in coordstrings]
