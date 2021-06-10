@@ -4,7 +4,7 @@ from lxml import etree
 from PIL import Image, ImageDraw
 
 
-def remove_images(image: Image, tree: etree.Element, ns_map: Dict[str, str]):
+def remove_images(image: Image, tree: etree.Element):
     """Draw white over ImageRegions
     """
     white = {
@@ -14,8 +14,8 @@ def remove_images(image: Image, tree: etree.Element, ns_map: Dict[str, str]):
         "Lab": (100, 0, 0), "HSV": (0, 0, 100)
     }[image.mode]
     draw = ImageDraw.Draw(image)
-    for image_region in tree.xpath('//page:ImageRegion', namespaces=ns_map):
-        for coords in image_region.xpath("./page:Coords", namespaces=ns_map) + image_region.xpath("./Coords"):
+    for image_region in tree.xpath('//{*}:ImageRegion'):
+        for coords in image_region.xpath("./{*}:Coords") + image_region.xpath("./Coords"):
             coordstrings = [x.split(",") for x in coords.attrib["points"].split()]
             poly = [(int(x[0]), int(x[1])) for x in coordstrings]
             draw.polygon(poly, fill=white)
