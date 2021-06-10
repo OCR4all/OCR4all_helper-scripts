@@ -77,24 +77,24 @@ def pagelineseg_cli(dataset, remove_images, minscale, maxlines, threshold, usega
         else:
             raise ValueError(f"Invalid data line with length {len(data)} instead of 2 or 3")
 
-        xml_output, _ = pagelineseg_helper.pagelineseg(pagexml, image,
-                                                          scale=scale,
-                                                          vscale=vscale,
-                                                          hscale=hscale,
-                                                          max_blackseps=max_blackseps,
-                                                          widen_blackseps=widen_blackseps,
-                                                          max_whiteseps=max_whiteseps,
-                                                          minheight_whiteseps=minheight_whiteseps,
-                                                          minscale=minscale,
-                                                          maxlines=maxlines,
-                                                          smear_strength=(smear_x, smear_y),
-                                                          growth=(growth_x, growth_y),
-                                                          filter_strength=filter_strength,
-                                                          fail_save_iterations=fail_save,
-                                                          maxskew=maxskew,
-                                                          skewsteps=skewsteps,
-                                                          usegauss=usegauss,
-                                                          remove_images=remove_images)
+        xml_output = pagelineseg_helper.pagelineseg(pagexml, image,
+                                                    scale=scale,
+                                                    vscale=vscale,
+                                                    hscale=hscale,
+                                                    max_blackseps=max_blackseps,
+                                                    widen_blackseps=widen_blackseps,
+                                                    max_whiteseps=max_whiteseps,
+                                                    minheight_whiteseps=minheight_whiteseps,
+                                                    minscale=minscale,
+                                                    maxlines=maxlines,
+                                                    smear_strength=(smear_x, smear_y),
+                                                    growth=(growth_x, growth_y),
+                                                    filter_strength=filter_strength,
+                                                    fail_save_iterations=fail_save,
+                                                    maxskew=maxskew,
+                                                    skewsteps=skewsteps,
+                                                    usegauss=usegauss,
+                                                    remove_images=remove_images)
 
         with Path(path_out).open("w+") as output_file:
             pagelineseg_helper.s_print(f"Save annotations into '{path_out}'")

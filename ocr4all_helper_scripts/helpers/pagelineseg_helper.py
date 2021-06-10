@@ -383,5 +383,4 @@ def pagelineseg(xmlfile: str,
     xmlstring = etree.tounicode(root.getroottree()).replace(
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2010-03-19",
         "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
-    no_lines_segm = int(root.xpath("count(//TextLine)"))
-    return xmlstring, no_lines_segm
+    return xmlstring
