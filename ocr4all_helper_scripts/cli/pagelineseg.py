@@ -77,7 +77,7 @@ def pagelineseg_cli(dataset, remove_images, minscale, maxlines, threshold, usega
         else:
             raise ValueError(f"Invalid data line with length {len(data)} instead of 2 or 3")
 
-        xml_output, _ = pagelineseg_helper.pagexmllineseg(pagexml, image,
+        xml_output, _ = pagelineseg_helper.pagelineseg(pagexml, image,
                                                           scale=scale,
                                                           vscale=vscale,
                                                           hscale=hscale,

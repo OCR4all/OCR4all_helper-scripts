@@ -277,25 +277,25 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
 
-def pagexmllineseg(xmlfile: str,
-                   imgpath: str,
-                   scale: float = None,
-                   vscale: float = 1.0,
-                   hscale: float = 1.0,
-                   max_blackseps: int = 0,
-                   widen_blackseps: int = 10,
-                   max_whiteseps: int = -1,
-                   minheight_whiteseps: int = 10,
-                   minscale: int = 12,
-                   maxlines: int = 300,
-                   smear_strength: Tuple[float, float] = (1.0, 2.0),
-                   growth: Tuple[float, float] = (1.1, 1.1),
-                   filter_strength: float = 1.0,
-                   fail_save_iterations: int = 100,
-                   maxskew: float = 2.0,
-                   skewsteps: int = 8,
-                   usegauss: bool = False,
-                   remove_images: bool = False):
+def pagelineseg(xmlfile: str,
+                imgpath: str,
+                scale: float = None,
+                vscale: float = 1.0,
+                hscale: float = 1.0,
+                max_blackseps: int = 0,
+                widen_blackseps: int = 10,
+                max_whiteseps: int = -1,
+                minheight_whiteseps: int = 10,
+                minscale: int = 12,
+                maxlines: int = 300,
+                smear_strength: Tuple[float, float] = (1.0, 2.0),
+                growth: Tuple[float, float] = (1.1, 1.1),
+                filter_strength: float = 1.0,
+                fail_save_iterations: int = 100,
+                maxskew: float = 2.0,
+                skewsteps: int = 8,
+                usegauss: bool = False,
+                remove_images: bool = False):
     name = Path(imgpath).name.split(".")[-1]
     s_print(f"""Start process for '{name}'
         |- Image: '{imgpath}'
@@ -316,7 +316,7 @@ def pagexmllineseg(xmlfile: str,
     if remove_images:
         imageutils.remove_images(im, root)
 
-    for n, coord in enumerate(sorted(coordmap)):
+    for coord_idx, coord in enumerate(sorted(coordmap)):
         coords = coordmap[coord]['coords']
 
         if len(coords) < 3:
@@ -357,27 +357,27 @@ def pagexmllineseg(xmlfile: str,
 
         # Interpret whole region as TextLine if no TextLines are found
         if not lines or len(lines) == 0:
-            coordstrg = " ".join([f"{x},{y}" for x, y in coords])
+            coord_str = " ".join([f"{x},{y}" for x, y in coords])
             textregion = root.xpath(f'//{{*}}TextRegion[@id="{coord}"]')[0]
             if orientation:
                 textregion.set('orientation', str(orientation))
             linexml = etree.SubElement(textregion, "TextLine",
-                                       attrib={"id": "{}_l{:03d}".format(coord, n + 1)})
-            etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
+                                       attrib={"id": "{}_l{:03d}".format(coord, coord_idx + 1)})
+            etree.SubElement(linexml, "Coords", attrib={"points": coord_str})
         else:
-            for n, poly in enumerate(lines):
+            for poly_idx, poly in enumerate(lines):
                 if coordmap[coord]["type"] == "drop-capital":
-                    coordstrg = coordmap[coord]["coordstring"]
+                    coord_str = coordmap[coord]["coordstring"]
                 else:
                     coords = ((x + min_x, y + min_y) for x, y in poly)
-                    coordstrg = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
+                    coord_str = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
 
                 textregion = root.xpath(f'//{{*}}TextRegion[@id="{coord}"]')[0]
                 if orientation:
                     textregion.set('orientation', str(orientation))
                 linexml = etree.SubElement(textregion, "TextLine",
-                                           attrib={"id": "{}_l{:03d}".format(coord, n + 1)})
-                etree.SubElement(linexml, "Coords", attrib={"points": coordstrg})
+                                           attrib={"id": "{}_l{:03d}".format(coord, poly_idx + 1)})
+                etree.SubElement(linexml, "Coords", attrib={"points": coord_str})
 
     s_print(f"[{name}] Generate new PAGE XML with text lines")
     xmlstring = etree.tounicode(root.getroottree()).replace(

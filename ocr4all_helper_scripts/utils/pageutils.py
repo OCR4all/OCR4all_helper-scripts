@@ -34,9 +34,9 @@ def construct_coordmap(tree: etree.Element) -> dict:
         coordmap[region_id] = {"type": text_region.attrib.get("type", "TextRegion")}
         coordmap[region_id]["coords"] = []
 
-        for c in text_region.xpath("./{*}Coords") + text_region.xpath("./Coords"):
-            coordmap[region_id]["coordstring"] = c.attrib["points"]
-            coordstrings = [x.split(",") for x in c.attrib["points"].split()]
+        for coord in text_region.xpath("./{*}Coords"):
+            coordmap[region_id]["coordstring"] = coord.attrib["points"]
+            coordstrings = [x.split(",") for x in coord.attrib["points"].split()]
             coordmap[region_id]["coords"] += [[int(x[0]), int(x[1])] for x in coordstrings]
         if text_region.attrib.get("orientation"):
             coordmap[region_id]["orientation"] = float(text_region.attrib["orientation"])
