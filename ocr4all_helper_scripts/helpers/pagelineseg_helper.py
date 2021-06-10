@@ -296,7 +296,7 @@ def pagelineseg(xmlfile: str,
                 skewsteps: int = 8,
                 usegauss: bool = False,
                 remove_images: bool = False):
-    name = Path(imgpath).name.split(".")[-1]
+    name = Path(imgpath).name.split(".")[0]
     s_print(f"""Start process for '{name}'
         |- Image: '{imgpath}'
         |- Annotations: '{xmlfile}' """)
