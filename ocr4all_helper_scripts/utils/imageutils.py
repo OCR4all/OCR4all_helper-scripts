@@ -1,5 +1,3 @@
-from typing import Dict
-
 from lxml import etree
 from PIL import Image, ImageDraw
 
