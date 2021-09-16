@@ -279,7 +279,7 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
                      + (point[1] - center_y) * math.cos(orient_rad)
                      + center_y)
         # move point
-        return max(0, int(rotated_x - delta_x)), max(0, int(rotated_y - delta_y))
+        return int(rotated_x - delta_x), int(rotated_y - delta_y)
 
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
@@ -320,6 +320,7 @@ def pagelineseg(xmlfile: str,
     s_print(f"[{name}] Extract Textlines from TextRegions")
 
     im = Image.open(imgpath)
+    width, height = im.size
 
     if remove_images:
         imageutils.remove_images(im, root)
@@ -384,7 +385,8 @@ def pagelineseg(xmlfile: str,
                     coord_str = coordmap[coord]["coordstring"]
                 else:
                     coords = ((x + min_x, y + min_y) for x, y in poly)
-                    coord_str = " ".join([f"{int(x)},{int(y)}" for x, y in coords])
+                    capped_coords = [(min(width, max(0, x)), min(height, max(0, y)) for x, y in coords)]
+                    coord_str = " ".join([f"{int(x)},{int(y)}" for x, y in capped_coords])
 
                 textregion = root.find(f'.//{{*}}TextRegion[@id="{coord}"]')
                 if orientation:
