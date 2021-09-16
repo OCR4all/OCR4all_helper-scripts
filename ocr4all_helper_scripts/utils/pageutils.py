@@ -40,3 +40,8 @@ def construct_coordmap(tree: etree.Element) -> dict:
             coordmap[region_id]["orientation"] = float(text_region.attrib["orientation"])
 
     return coordmap
+
+
+def remove_existing_textlines(tree: etree.Element):
+    for textline in tree.findall(".//{*}TextLine"):
+        textline.getparent().remove(textline)

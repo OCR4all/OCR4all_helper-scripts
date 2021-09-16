@@ -42,8 +42,13 @@ def s_print_error(*objs):
     s_print("ERROR: ", *objs, file=sys.stderr)
 
 
-def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[float, float], scale: int,
-                  growth: Tuple[float, float], max_iterations: int, filter_strength: float) -> List[Record]:
+def compute_lines(segmentation: np.ndarray,
+                  smear_strength: Tuple[float, float],
+                  scale: int,
+                  growth: Tuple[float, float],
+                  max_iterations: int,
+                  filter_strength: float,
+                  bounding_box: bool) -> List[Record]:
     """Given a line segmentation map, computes a list of tuples consisting of 2D slices and masked images.
     Implementation derived from ocropy with changes to allow extracting the line coords/polygons.
     """
@@ -62,7 +67,7 @@ def compute_lines(segmentation: np.ndarray, smear_strength: Tuple[float, float],
         result.label = i + 1
         result.bounds = o
         polygon = []
-        if ((segmentation[o] != 0) == (segmentation[o] != i + 1)).any():
+        if ((segmentation[o] != 0) == (segmentation[o] != i + 1)).any() and not bounding_box:
             ppoints = approximate_smear_polygon(mask, smear_strength, growth, max_iterations)
             ppoints = ppoints[1:] if ppoints else []
             polygon = [(o[1].start + x, o[0].start + y) for x, y in ppoints]
@@ -201,7 +206,8 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
             minheight_whiteseps: int = 10, filter_strength: float = 1.0,
             smear_strength: Tuple[float, float] = (1.0, 2.0), growth: Tuple[float, float] = (1.1, 1.1),
             orientation: int = 0, fail_save_iterations: int = 1000, vscale: float = 1.0, hscale: float = 1.0,
-            minscale: float = 12.0, maxlines: int = 300, threshold: float = 0.2, usegauss: bool = False):
+            minscale: float = 12.0, maxlines: int = 300, threshold: float = 0.2, usegauss: bool = False,
+            bounding_box: bool = False):
     """
     Segments a page into text lines.
     Segments a page into text lines and returns the absolute coordinates of
@@ -254,7 +260,8 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
                                        scale,
                                        growth,
                                        fail_save_iterations,
-                                       filter_strength)
+                                       filter_strength,
+                                       bounding_box)
 
     # Translate each point back to original
     delta_x = (im_rotated.width - im.width) / 2
@@ -286,7 +293,7 @@ def pagelineseg(xmlfile: str,
                 widen_blackseps: int = 10,
                 max_whiteseps: int = -1,
                 minheight_whiteseps: int = 10,
-                minscale: int = 12,
+                minscale: float = 12.0,
                 maxlines: int = 300,
                 smear_strength: Tuple[float, float] = (1.0, 2.0),
                 growth: Tuple[float, float] = (1.1, 1.1),
@@ -295,7 +302,8 @@ def pagelineseg(xmlfile: str,
                 maxskew: float = 2.0,
                 skewsteps: int = 8,
                 usegauss: bool = False,
-                remove_images: bool = False):
+                remove_images: bool = False,
+                bounding_box: bool = False):
     name = Path(imgpath).name.split(".")[0]
     s_print(f"""Start process for '{name}'
         |- Image: '{imgpath}'
@@ -315,6 +323,8 @@ def pagelineseg(xmlfile: str,
 
     if remove_images:
         imageutils.remove_images(im, root)
+
+    pageutils.remove_existing_textlines(root)
 
     for coord_idx, coord in enumerate(sorted(coordmap)):
         coords = coordmap[coord]['coords']
@@ -345,12 +355,16 @@ def pagelineseg(xmlfile: str,
                                 max_whiteseps=max_whiteseps,
                                 minheight_whiteseps=minheight_whiteseps,
                                 filter_strength=filter_strength,
-                                smear_strength=smear_strength, growth=growth,
+                                smear_strength=smear_strength,
+                                growth=growth,
                                 orientation=orientation,
                                 fail_save_iterations=fail_save_iterations,
-                                vscale=vscale, hscale=hscale,
-                                minscale=minscale, maxlines=maxlines,
-                                usegauss=usegauss)
+                                vscale=vscale,
+                                hscale=hscale,
+                                minscale=minscale,
+                                maxlines=maxlines,
+                                usegauss=usegauss,
+                                bounding_box=bounding_box)
 
         else:
             lines = []

@@ -17,7 +17,7 @@ import click
                    "ImageRegions overlap with TextRegions.")
 @click.option("--minscale", type=float, default=12.0,
               help="Minimum scale permitted.")
-@click.option("--maxlines", type=float, default=300,
+@click.option("--maxlines", type=int, default=300,
               help="Maximum number of lines permitted.")
 @click.option("--threshold", type=float, default=0.2,
               help="Baseline threshold.")
@@ -59,11 +59,14 @@ import click
               help="Widen black separators (to account for warping).")
 @click.option("--max-whiteseps", type=int, default=-1,
               help="Maximum amount of whitespace column separators.")
-@click.option("--minheight-whiteseps", type=float, default=10,
+@click.option("--minheight-whiteseps", type=int, default=10,
               help="Minimum column height (units=scale).")
-def pagelineseg_cli(dataset, remove_images, minscale, maxlines, threshold, usegauss, scale, hscale, vscale,
-                    filter_strength, maxskew, skewsteps, parallel, smear_x, smear_y, growth_x, growth_y, fail_save,
-                    max_blackseps, widen_blackseps, max_whiteseps, minheight_whiteseps):
+@click.option("--bounding-rectangle", is_flag=True, default=False, help="Uses bounding rectangles instead of polygons.")
+def pagelineseg_cli(dataset: str, remove_images: bool, minscale: float, maxlines: int, threshold: float,
+                    usegauss: bool, scale: float, hscale: float, vscale: float, filter_strength: float, maxskew: float,
+                    skewsteps: int, parallel: int, smear_x: float, smear_y: float, growth_x: float, growth_y: float,
+                    fail_save: int, max_blackseps: int, widen_blackseps: int, max_whiteseps: int,
+                    minheight_whiteseps: int, bounding_rectangle: bool):
     with Path(dataset).open('r') as data_file:
         dataset = json.load(data_file)
 
@@ -94,7 +97,8 @@ def pagelineseg_cli(dataset, remove_images, minscale, maxlines, threshold, usega
                                                     maxskew=maxskew,
                                                     skewsteps=skewsteps,
                                                     usegauss=usegauss,
-                                                    remove_images=remove_images)
+                                                    remove_images=remove_images,
+                                                    bounding_box=bounding_rectangle)
 
         with Path(path_out).open("w+") as output_file:
             pagelineseg_helper.s_print(f"Save annotations into '{path_out}'")
