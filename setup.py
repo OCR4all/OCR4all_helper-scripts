@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(name='ocr4all_helper_scripts',
-      version='0.3.2',
+      version='0.4.0',
       description='Different python scripts used in the OCR4all workflow.',
       long_description=long_description,
       url='https://github.com/OCR4all/OCR4all_helper-scripts',
