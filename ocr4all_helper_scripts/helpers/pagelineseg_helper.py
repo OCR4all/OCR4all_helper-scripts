@@ -279,7 +279,7 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
                      + (point[1] - center_y) * math.cos(orient_rad)
                      + center_y)
         # move point
-        return int(rotated_x - delta_x), int(rotated_y - delta_y)
+        return max(0, int(rotated_x - delta_x)), max(0, int(rotated_y - delta_y))
 
     return [[translate_back(p) for p in record.polygon] for record in lines_and_polygons]
 
