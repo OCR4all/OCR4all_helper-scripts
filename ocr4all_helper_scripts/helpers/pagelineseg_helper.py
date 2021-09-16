@@ -385,7 +385,7 @@ def pagelineseg(xmlfile: str,
                     coord_str = coordmap[coord]["coordstring"]
                 else:
                     coords = ((x + min_x, y + min_y) for x, y in poly)
-                    capped_coords = [(min(width, max(0, x)), min(height, max(0, y)) for x, y in coords)]
+                    capped_coords = [(min(width, max(0, x)), min(height, max(0, y))) for x, y in coords]
                     coord_str = " ".join([f"{int(x)},{int(y)}" for x, y in capped_coords])
 
                 textregion = root.find(f'.//{{*}}TextRegion[@id="{coord}"]')
