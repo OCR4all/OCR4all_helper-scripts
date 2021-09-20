@@ -58,6 +58,7 @@ def compute_lines(segmentation: np.ndarray,
         if o is None:
             continue
         if sl.dim1(o) < 2 * scale * filter_strength or sl.dim0(o) < scale * filter_strength:
+            s_print(f"Filter strength of {filter_strength} too high. Skipping detected line object…")
             continue
         mask = (segmentation[o] == i + 1)
         if np.amax(mask) == 0:
