@@ -26,6 +26,9 @@ import math
 
 from lxml import etree
 from PIL import Image
+from shapely.geometry import Polygon
+from shapely import affinity
+
 
 # Add printing for every thread
 from threading import Lock
@@ -329,12 +332,12 @@ def pagelineseg(xmlfile: str,
     pageutils.remove_existing_textlines(root)
 
     for coord_idx, coord in enumerate(sorted(coordmap)):
-        coords = coordmap[coord]['coords']
+        region_coords = coordmap[coord]['coords']
 
-        if len(coords) < 3:
+        if len(region_coords) < 3:
             continue
 
-        cropped, [min_x, min_y, max_x, max_y] = imgmanipulate.cutout(im, coords)
+        cropped, [min_x, min_y, max_x, max_y] = imgmanipulate.cutout(im, region_coords)
 
         if coordmap[coord].get("orientation"):
             orientation = coordmap[coord]['orientation']
@@ -373,7 +376,7 @@ def pagelineseg(xmlfile: str,
 
         # Interpret whole region as TextLine if no TextLines are found
         if not lines or len(lines) == 0:
-            coord_str = " ".join([f"{x},{y}" for x, y in coords])
+            coord_str = " ".join([f"{x},{y}" for x, y in region_coords])
             textregion = root.find(f'.//{{*}}TextRegion[@id="{coord}"]')
             if orientation:
                 textregion.set('orientation', str(orientation))
@@ -385,9 +388,9 @@ def pagelineseg(xmlfile: str,
                 if coordmap[coord]["type"] == "drop-capital":
                     coord_str = coordmap[coord]["coordstring"]
                 else:
-                    coords = ((x + min_x, y + min_y) for x, y in poly)
-                    capped_coords = [(min(width, max(0, x)), min(height, max(0, y))) for x, y in coords]
-                    coord_str = " ".join([f"{int(x)},{int(y)}" for x, y in capped_coords])
+                    line_coords = Polygon([(x + min_x, y + min_y) for x, y in poly])
+                    sanitized_coords = pageutils.sanitize(line_coords, Polygon(region_coords), width, height)
+                    coord_str = " ".join([f"{int(x)},{int(y)}" for x, y in sanitized_coords])
 
                 textregion = root.find(f'.//{{*}}TextRegion[@id="{coord}"]')
                 if orientation:
