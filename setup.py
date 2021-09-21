@@ -26,6 +26,7 @@ setup(name='ocr4all_helper_scripts',
       install_requires=[
             "click",
             "numpy",
+            "shapely",
             "lxml",
             "scikit-image",
             "Pillow"
