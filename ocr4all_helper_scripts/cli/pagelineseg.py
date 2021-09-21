@@ -50,7 +50,7 @@ import click
 @click.option("--growth-y", type=float, default=1.1,
               help="Growth in Y direction for every iteration of the textline polygon finding. Will speed up the "
                    "algorithm at the cost of precision.")
-@click.option("--fail-save", type=int, default=1000,
+@click.option("--fail-save", type=int, default=50,
               help="Fail save to counter infinite loops when combining contours to a precise textline. Will connect "
                    "remaining contours with lines.")
 @click.option("--max-blackseps", type=int, default=0,

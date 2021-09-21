@@ -27,7 +27,6 @@ import math
 from lxml import etree
 from PIL import Image
 from shapely.geometry import Polygon
-from shapely import affinity
 
 
 # Add printing for every thread
@@ -119,7 +118,7 @@ def boundary(contour: np.ndarray) -> List[np.float64]:
 
 
 def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float, float] = (1.0, 2.0),
-                              growth: Tuple[float, float] = (1.1, 1.1), max_iterations: int = 1000):
+                              growth: Tuple[float, float] = (1.1, 1.1), max_iterations: int = 50):
     """Approximate a single polygon around high pixels in a mask, via smearing
     """
     padding = 1
@@ -209,7 +208,7 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float
 def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blackseps: int = 10, max_whiteseps: int = 3,
             minheight_whiteseps: int = 10, filter_strength: float = 1.0,
             smear_strength: Tuple[float, float] = (1.0, 2.0), growth: Tuple[float, float] = (1.1, 1.1),
-            orientation: int = 0, fail_save_iterations: int = 1000, vscale: float = 1.0, hscale: float = 1.0,
+            orientation: int = 0, fail_save_iterations: int = 50, vscale: float = 1.0, hscale: float = 1.0,
             minscale: float = 12.0, maxlines: int = 300, threshold: float = 0.2, usegauss: bool = False,
             bounding_box: bool = False):
     """
@@ -302,7 +301,7 @@ def pagelineseg(xmlfile: str,
                 smear_strength: Tuple[float, float] = (1.0, 2.0),
                 growth: Tuple[float, float] = (1.1, 1.1),
                 filter_strength: float = 1.0,
-                fail_save_iterations: int = 100,
+                fail_save_iterations: int = 50,
                 maxskew: float = 2.0,
                 skewsteps: int = 8,
                 usegauss: bool = False,
