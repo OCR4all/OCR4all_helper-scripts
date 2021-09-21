@@ -223,7 +223,7 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
         raise ValueError('Image is not bi-level')
 
     # rotate input image for vertical lines
-    im_rotated = im.rotate(-1 * orientation, expand=True)
+    im_rotated = im.rotate(-orientation, expand=True, fillcolor="white")
 
     a = np.array(im_rotated.convert('L')) if im_rotated.mode == '1' else np.array(im_rotated)
 
