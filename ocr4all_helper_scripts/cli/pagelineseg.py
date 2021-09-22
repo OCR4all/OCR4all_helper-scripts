@@ -12,7 +12,7 @@ import click
 @click.option("--dataset", type=str, required=True,
               help="Path to the input dataset in json format with a list of image path, PAGE XML path and optional "
                    "output path. (Will overwrite pagexml if no output path is given)")
-@click.option("--remove-images", is_flag=True,
+@click.option("--remove-images", is_flag=True, default=True,
               help="Remove ImageRegions from the image before processing TextRegions for TextLines. Can be used if "
                    "ImageRegions overlap with TextRegions.")
 @click.option("--minscale", type=float, default=12.0,
