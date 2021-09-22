@@ -172,7 +172,7 @@ def approximate_smear_polygon(line_mask: np.ndarray, smear_strength: Tuple[float
             # Failsave if contours can't be smeared together after x iterations
             # Draw lines between the extreme points of each contour in order
             if iteration >= max_iterations and len(contours) > 1:
-                s_print(f"Start fail save, since precise line generation took too many iterations ({iteration}).")
+                s_print(f"Start fail save, since precise line generation took too many iterations ({max_iterations}).")
                 extreme_points = []
                 for contour in contours:
                     sorted_x = sorted(contour, key=lambda c: c[0])
