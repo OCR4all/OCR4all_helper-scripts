@@ -1,15 +1,20 @@
 from lxml import etree
-from shapely.geometry import Polygon, GeometryCollection
+from shapely.errors import TopologicalError
+from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
 
 
 def sanitize(polygon: Polygon,
              parent: Polygon,
              page_width: int,
              page_height: int):
-    sanitized_polygon = parent.intersection(polygon)
+    try:
+        sanitized_polygon = parent.intersection(polygon)
+    except TopologicalError as e:
+        print("Couldn't create intersection of polygon and parent polygon...")
+        return [(x, y) for x, y in polygon.exterior.coords]
     # If intersection leads to more than one element just use the element with the largest area as all others are
-    # most likely nice. TODO: check if this can't be done more elegantely
-    if isinstance(sanitized_polygon, GeometryCollection):
+    # most likely noise. TODO: check if this can't be done more elegantely
+    if isinstance(sanitized_polygon, GeometryCollection) or isinstance(sanitized_polygon, MultiPolygon):
         sanitized_polygon = max(sanitized_polygon, key=lambda a: a.area)
     sanitized_polygon = [(min(page_width, max(0, x)),
                           min(page_height, max(0, y))) for x, y in sanitized_polygon.exterior.coords]
