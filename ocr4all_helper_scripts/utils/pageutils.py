@@ -1,6 +1,7 @@
 from lxml import etree
 from shapely.errors import TopologicalError
 from shapely.geometry import Polygon, MultiPolygon, GeometryCollection
+from shapely.ops import unary_union
 
 
 def sanitize(polygon: Polygon,
@@ -12,13 +13,14 @@ def sanitize(polygon: Polygon,
     except TopologicalError as e:
         print("Couldn't create intersection of polygon and parent polygon...")
         return [(x, y) for x, y in polygon.exterior.coords]
-    # If intersection leads to more than one element just use the element with the largest area as all others are
-    # most likely noise. TODO: check if this can't be done more elegantely
+    # If intersection leads to more than one element build the convex hull of all polygons
     if isinstance(sanitized_polygon, GeometryCollection) or isinstance(sanitized_polygon, MultiPolygon):
-        sanitized_polygon = max(sanitized_polygon, key=lambda a: a.area)
-    sanitized_polygon = [(min(page_width, max(0, x)),
-                          min(page_height, max(0, y))) for x, y in sanitized_polygon.exterior.coords]
-    return sanitized_polygon
+        union = unary_union(sanitized_polygon)
+        hull = union.convex_hull
+        return [(min(page_width, max(0, x)),
+                 min(page_height, max(0, y))) for x, y in hull.exterior.coords]
+    return [(min(page_width, max(0, x)),
+             min(page_height, max(0, y))) for x, y in sanitized_polygon.exterior.coords]
 
 
 def get_root(xmlfile: str) -> etree.Element:
