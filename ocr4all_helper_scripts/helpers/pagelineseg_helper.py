@@ -17,6 +17,7 @@ from ocr4all_helper_scripts.utils import pageutils, imageutils
 from pathlib import Path
 import sys
 from typing import List, Tuple
+import logging
 
 import numpy as np
 from skimage.measure import find_contours, approximate_polygon
@@ -34,6 +35,7 @@ from threading import Lock
 
 s_print_lock = Lock()
 
+logging.getLogger('shapely.geos').setLevel(logging.CRITICAL)
 
 def s_print(*args, **kwargs):
     with s_print_lock:
