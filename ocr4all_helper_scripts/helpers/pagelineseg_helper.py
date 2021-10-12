@@ -26,7 +26,7 @@ from scipy.ndimage.filters import gaussian_filter, uniform_filter
 import math
 
 from lxml import etree
-from PIL import Image
+from PIL import Image, ImageChops
 from shapely.geometry import Polygon
 
 
@@ -348,6 +348,11 @@ def pagelineseg(xmlfile: str,
             s_print(f"[{name}] Skew estimate between +/-{maxskew} in {skewsteps} steps. Estimated {orientation}°")
 
         if cropped is not None:
+            # Check whether cropped are is completely white or black and skip if true
+            if not cropped.getbbox() or not ImageChops.invert(cropped).getbbox():
+                s_print(f"[{name}] Skipping fully black / white region...")
+                continue
+
             colors = cropped.getcolors(2)
             if not (colors is not None and len(colors) == 2):
                 cropped = Image.fromarray(nlbin.adaptive_binarize(np.array(cropped)).astype(np.uint8))
