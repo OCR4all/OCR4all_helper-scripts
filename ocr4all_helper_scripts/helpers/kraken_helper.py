@@ -25,5 +25,5 @@ class KrakenHelper:
             text_regions = root.findall(".//{*}TextRegion")
             for idx, text_region in enumerate(text_regions):
                 text_region.set("id", f"r_{str(idx).zfill(4)}")
-            with file.open("w") as outfile:
+            with xml.open("w") as outfile:
                 outfile.write(etree.tostring(root, encoding="unicode", pretty_print=True))
