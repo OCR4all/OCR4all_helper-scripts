@@ -15,7 +15,7 @@ class KrakenHelper:
             files_args.append(str(file))
             files_args.append(str(Path()))
 
-        command = f"kraken -x -v -i {' '.join(files_args)} segment -bl"
+        command = f"kraken -x -v {' '.join(files_args)} segment -bl"
         subprocess.call(command, shell=True)
 
     def postprocess(self):
