@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess
+import sys
 
 from lxml import etree
 
@@ -15,8 +16,11 @@ class KrakenHelper:
             files_args.append(str(file))
             files_args.append(str(Path(file.parent, f"{file.name.split('.')[0]}.xml")))
 
-        command = f"kraken -x -v {' '.join(files_args)} segment -bl"
-        subprocess.call(command, shell=True)
+        command = ["kraken", "-x", "-v"]
+        command.extend(files_args)
+        command.append("segment")
+        command.append("-bl")
+        subprocess.run(command, stderr=sys.stderr, stdout=sys.stdout)
 
     def postprocess(self):
         for file in self.files:
