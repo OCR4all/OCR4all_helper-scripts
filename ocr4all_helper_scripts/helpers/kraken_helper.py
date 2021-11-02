@@ -6,7 +6,7 @@ from lxml import etree
 
 class KrakenHelper:
     def __init__(self, files):
-        self.files = files
+        self.files = [Path(file) for file in files]
 
     def run(self):
         files_args = []
