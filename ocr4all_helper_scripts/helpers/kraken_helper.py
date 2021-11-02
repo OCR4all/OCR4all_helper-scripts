@@ -13,7 +13,7 @@ class KrakenHelper:
         for file in self.files:
             files_args.append("-i")
             files_args.append(str(file))
-            files_args.append(str(Path()))
+            files_args.append(str(Path(file.parent, f"{file.name.split('.')[0]}.xml")))
 
         command = f"kraken -x -v {' '.join(files_args)} segment -bl"
         subprocess.call(command, shell=True)
