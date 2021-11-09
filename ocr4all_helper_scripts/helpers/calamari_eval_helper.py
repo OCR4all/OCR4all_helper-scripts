@@ -42,9 +42,9 @@ def save_eval_files(files: List[str]):
     for file in files:
         gt, pred = get_text_content(file)
 
-        with Path(EVAL_DIR, f"{Path(file).name.split('.')[0]}.gt.txt") as gtfile:
+        with Path(EVAL_DIR, f"{Path(file).name.split('.')[0]}.gt.txt").open("w") as gtfile:
             gtfile.write("\n".join(pred))
-        with Path(EVAL_DIR, f"{Path(file).name.split('.')[0]}.pred.txt") as predfile:
+        with Path(EVAL_DIR, f"{Path(file).name.split('.')[0]}.pred.txt").open("w") as predfile:
             predfile.write("\n".join(pred))
 
 
