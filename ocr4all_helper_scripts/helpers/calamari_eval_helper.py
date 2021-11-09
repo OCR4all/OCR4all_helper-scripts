@@ -51,11 +51,11 @@ def save_eval_files(files: List[str]):
 def run_eval(n_confusions: int, skip_empty_gt: bool):
     command = ["calamari-eval"]
     command.extend(["--gt.texts", f"{EVAL_DIR}/*.gt.txt"])
-    command.extend(["--pred.texts", f"{EVAL_DIR}/*.pred.txt"])
+    command.extend(["--gt.pred_extension", f".pred.txt"])
     command.extend(["--n_confusions", f"{n_confusions}"])
 
     if skip_empty_gt:
-        command.extend(["--skip_empty_gt", "True"])
+        command.extend(["--evaluator.skip_empty_gt", "True"])
 
     subprocess.run(command, stderr=sys.stderr, stdout=sys.stdout)
 
