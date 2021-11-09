@@ -1,5 +1,5 @@
 import subprocess
-from typing import List, Tuple, Union
+from typing import List, Tuple
 from pathlib import Path
 import sys
 
