@@ -22,8 +22,8 @@ def get_text_content(file: str) -> Tuple[List[str], List[str]]:
     root = etree.parse(file).getroot()
     lines = root.findall(".//{*}TextLine")
     for line in lines:
-        gt_equiv = [gt_equiv for gt_equiv in line.find("./{*}TextEquiv") if gt_equiv.get("index") == "0"]
-        pred_equiv = [gt_equiv for gt_equiv in line.find("./{*}TextEquiv") if gt_equiv.get("index") == "1"]
+        gt_equiv = [gt_equiv for gt_equiv in line.findall("./{*}TextEquiv") if gt_equiv.get("index") == "0"]
+        pred_equiv = [pred_equiv for pred_equiv in line.findall("./{*}TextEquiv") if pred_equiv.get("index") == "1"]
 
         if len(gt_equiv) == 1:
             gt.append("".join(gt_equiv[0].find("./{*}Unicode").itertext()))
