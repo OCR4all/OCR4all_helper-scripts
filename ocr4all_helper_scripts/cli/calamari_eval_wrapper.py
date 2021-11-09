@@ -6,7 +6,7 @@ import click
 @click.command("calamari-eval-wrapper", help="Evaluates OCR quality via calamari-eval.")
 @click.argument("FILES", nargs=-1)
 @click.option("--n-confusions", type=int, default=10)
-@click.option("--skip_empty_gt", type=bool, default=False)
+@click.option("--skip_empty_gt", is_flag=True, type=bool, default=False)
 def calamari_eval_cli(files, n_confusions, skip_empty_gt):
     calamari_eval_helper.prepare_filesystem()
     calamari_eval_helper.save_eval_files(files)
