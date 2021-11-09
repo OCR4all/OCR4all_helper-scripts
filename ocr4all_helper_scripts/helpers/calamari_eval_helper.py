@@ -33,7 +33,7 @@ def get_text_content(file: str) -> Tuple[List[str], List[str]]:
         if len(pred_equiv) == 1:
             pred.append("".join(pred_equiv[0].find("./{*}Unicode").itertext()))
         else:
-            gt.append("")
+            pred.append("")
 
     return gt, pred
 
@@ -43,7 +43,7 @@ def save_eval_files(files: List[str]):
         gt, pred = get_text_content(file)
 
         with Path(EVAL_DIR, f"{Path(file).name.split('.')[0]}.gt.txt").open("w") as gtfile:
-            gtfile.write("\n".join(pred))
+            gtfile.write("\n".join(gt))
         with Path(EVAL_DIR, f"{Path(file).name.split('.')[0]}.pred.txt").open("w") as predfile:
             predfile.write("\n".join(pred))
 
