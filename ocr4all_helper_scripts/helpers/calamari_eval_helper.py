@@ -48,11 +48,12 @@ def save_eval_files(files: List[str]):
             predfile.write("\n".join(pred))
 
 
-def run_eval(n_confusions: int, skip_empty_gt: bool):
+def run_eval(n_confusions: int, skip_empty_gt: bool, num_threads: int):
     command = ["calamari-eval"]
     command.extend(["--gt.texts", f"{EVAL_DIR}/*.gt.txt"])
     command.extend(["--gt.pred_extension", f".pred.txt"])
     command.extend(["--n_confusions", f"{n_confusions}"])
+    command.extend(["--evaluator.setup.num_processes", f"{num_threads}"])
 
     if skip_empty_gt:
         command.extend(["--evaluator.skip_empty_gt", "True"])
