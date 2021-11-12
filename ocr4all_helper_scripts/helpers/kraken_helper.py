@@ -53,7 +53,7 @@ class KrakenHelper:
     def shrink_full_page_region(text_region: etree.Element):
         region_coord = text_region.find("./{*}Coord")
 
-        textline = text_region.find("./{*}TextRegion")
+        textline = text_region.find("./{*}TextLine")
         textline_coord = textline.find("./{*}Coord")
 
         region_coord.set("points", textline_coord.get("points"))
