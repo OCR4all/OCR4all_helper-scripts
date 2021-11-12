@@ -1,5 +1,6 @@
 from pathlib import Path
 import subprocess
+from typing import List
 import sys
 
 from lxml import etree
@@ -26,8 +27,48 @@ class KrakenHelper:
         for file in self.files:
             xml = Path(file.parent, f"{file.name.split('.')[0]}.xml")
             root = etree.parse(str(xml)).getroot()
+
             text_regions = root.findall(".//{*}TextRegion")
+            ro = list()
+
             for idx, text_region in enumerate(text_regions):
-                text_region.set("id", f"r_{str(idx).zfill(4)}")
+                coords = text_region.find("./{*}Coords")
+                points = coords.get("points")
+                if "-" in points:
+                    points = points.replace("-", "")
+                    coords.set("points", points)
+
+                if text_region.get("context") is None and coords.get("points").startswith("0,0"):
+                    self.shrink_full_page_region(text_region)
+
+                new_id = f"r_{str(idx).zfill(4)}"
+                text_region.set("id", new_id)
+                ro.append(f"r_{str(idx).zfill(4)}")
+
+            self.create_reading_order(root, ro)
             with xml.open("w") as outfile:
                 outfile.write(etree.tostring(root, encoding="unicode", pretty_print=True))
+
+    @staticmethod
+    def shrink_full_page_region(text_region: etree.Element):
+        region_coord = text_region.find("./{*}Coord")
+
+        textline = text_region.find("./{*}TextRegion")
+        textline_coord = textline.find("./{*}Coord")
+
+        region_coord.set("points", textline_coord.get("points"))
+
+    @staticmethod
+    def create_reading_order(root: etree.Element, reading_order: List[str]):
+        page_elem = root.find("./{*}Page")
+
+        reading_order_element = etree.Element("ReadingOrder")
+        ordered_group_element = etree.SubElement(reading_order_element, "OrderedGroup")
+        ordered_group_element.set("id", "g0")
+
+        for idx, elem in reading_order:
+            region_ref_index_elem = etree.SubElement(ordered_group_element, "RegionRefIndexed")
+            region_ref_index_elem.set("index", str(idx))
+            region_ref_index_elem.set("regionRef", elem)
+
+        root.insert(0, page_elem)
