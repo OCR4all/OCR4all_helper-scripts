@@ -45,6 +45,13 @@ class KrakenHelper:
                 text_region.set("id", new_id)
                 ro.append(f"r_{str(idx).zfill(4)}")
 
+                for line in text_region.findall("./{*}TextLine"):
+                    line_coords = line.find("./{*}Coords")
+                    line_points = line_coords.get("points")
+                    if "-" in line_points:
+                        line_points = line_points.replace("-", "")
+                        line_coords.set("points", line_points)
+
             self.create_reading_order(root, ro)
             with xml.open("w") as outfile:
                 outfile.write(etree.tostring(root, encoding="unicode", pretty_print=True))
