@@ -71,4 +71,4 @@ class KrakenHelper:
             region_ref_index_elem.set("index", str(idx))
             region_ref_index_elem.set("regionRef", elem)
 
-        root.insert(0, page_elem)
+        page_elem.insert(0, reading_order_element)
