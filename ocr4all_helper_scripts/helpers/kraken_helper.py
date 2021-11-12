@@ -66,7 +66,7 @@ class KrakenHelper:
         ordered_group_element = etree.SubElement(reading_order_element, "OrderedGroup")
         ordered_group_element.set("id", "g0")
 
-        for idx, elem in reading_order:
+        for idx, elem in enumerate(reading_order):
             region_ref_index_elem = etree.SubElement(ordered_group_element, "RegionRefIndexed")
             region_ref_index_elem.set("index", str(idx))
             region_ref_index_elem.set("regionRef", elem)
