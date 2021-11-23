@@ -24,6 +24,9 @@ class KrakenHelper:
         subprocess.run(command, stderr=sys.stderr, stdout=sys.stdout)
 
     def postprocess(self):
+        """Fixes several non-valid PAGE XML entries produced by kraken in the currently used version.
+
+        """
         for file in self.files:
             xml = Path(file.parent, f"{file.name.split('.')[0]}.xml")
             root = etree.parse(str(xml)).getroot()
@@ -58,6 +61,11 @@ class KrakenHelper:
 
     @staticmethod
     def shrink_full_page_region(text_region: etree.Element):
+        """Shrinks full page TextRegion which only contain one TextLine element to the coords of the TextLine element.
+        These elements are produced by kraken when a baseline and its TextLine element can't be assigned to an existing
+        region.
+
+        """
         region_coord = text_region.find("./{*}Coords")
 
         textline = text_region.find("./{*}TextLine")
@@ -67,6 +75,9 @@ class KrakenHelper:
 
     @staticmethod
     def create_reading_order(root: etree.Element, reading_order: List[str]):
+        """Creates ReadingOrder element from existing order in XML tree as kraken doesn't create this itself.
+
+        """
         page_elem = root.find("./{*}Page")
 
         reading_order_element = etree.Element("ReadingOrder")
