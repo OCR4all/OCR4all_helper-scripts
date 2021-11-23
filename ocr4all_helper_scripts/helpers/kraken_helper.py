@@ -31,6 +31,8 @@ class KrakenHelper:
             xml = Path(file.parent, f"{file.name.split('.')[0]}.xml")
             root = etree.parse(str(xml)).getroot()
 
+            self.merge_duplicate_regions(root)
+
             text_regions = root.findall(".//{*}TextRegion")
             ro = list()
 
@@ -58,6 +60,20 @@ class KrakenHelper:
             self.create_reading_order(root, ro)
             with xml.open("w") as outfile:
                 outfile.write(etree.tostring(root, encoding="unicode", pretty_print=True))
+
+    @staticmethod
+    def merge_duplicate_regions(root: etree.Element):
+        text_regions_ids = [elem.get("id") for elem in root.findall(".//{*}TextRegion")]
+        duplicate_ids = set([_id for _id in text_regions_ids if text_regions_ids.count(_id) > 1])
+
+        for duplicate_id in duplicate_ids:
+            duplicate_elems = [elem for elem in root.findall(".//{*}TextRegion") if elem.get("id") == duplicate_id]
+            original_elem = duplicate_elems[0]
+            for duplicate_elem in duplicate_elems:
+                textlines = duplicate_elem.findall(".//{*}TextLine")
+                for textline in textlines:
+                    original_elem.append(textline)
+                duplicate_elem.getparent().remove(duplicate_elem)
 
     @staticmethod
     def shrink_full_page_region(text_region: etree.Element):
