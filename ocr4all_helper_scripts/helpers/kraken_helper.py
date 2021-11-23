@@ -69,7 +69,7 @@ class KrakenHelper:
         for duplicate_id in duplicate_ids:
             duplicate_elems = [elem for elem in root.findall(".//{*}TextRegion") if elem.get("id") == duplicate_id]
             original_elem = duplicate_elems[0]
-            for duplicate_elem in duplicate_elems:
+            for duplicate_elem in duplicate_elems[1:]:
                 textlines = duplicate_elem.findall(".//{*}TextLine")
                 for textline in textlines:
                     original_elem.append(textline)
