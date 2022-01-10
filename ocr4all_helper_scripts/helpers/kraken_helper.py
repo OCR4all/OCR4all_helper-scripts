@@ -17,7 +17,7 @@ class KrakenHelper:
             files_args.append(str(file))
             files_args.append(str(Path(file.parent, f"{file.name.split('.')[0]}.xml")))
 
-        command = ["kraken", "-x", "-v"]
+        command = ["kraken", "-v"]
         command.extend(files_args)
         command.append("segment")
         command.append("-bl")
