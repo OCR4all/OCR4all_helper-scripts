@@ -2,6 +2,7 @@ from ocr4all_helper_scripts.helpers import calamari_eval_helper
 
 import tempfile
 import contextlib
+from pathlib import Path
 
 import click
 
@@ -19,8 +20,10 @@ def calamari_eval_cli(files, num_threads, n_confusions, skip_empty_gt):
         calamari_eval_helper.save_eval_files(files)
         calamari_eval_helper.run_eval(n_confusions, skip_empty_gt, num_threads)
         calamari_eval_helper.cleanup()
-    for line in outfile.readlines():
-        print(line)
+    with Path(outfile_name).open("r") as fp:
+        for line in fp.readlines():
+            print(line)
+    Path(outfile_name).unlink()
 
 
 if __name__ == "__main__":
