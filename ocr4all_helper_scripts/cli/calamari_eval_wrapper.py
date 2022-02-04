@@ -10,7 +10,7 @@ import click
 @click.command("calamari-eval-wrapper", help="Evaluates OCR quality via calamari-eval.")
 @click.argument("FILES", nargs=-1)
 @click.option("--num_threads", type=int, default=1)
-@click.option("--n-confusions", type=int, default=10)
+@click.option("--n_confusions", type=int, default=10)
 @click.option("--skip_empty_gt", is_flag=True, type=bool, default=False)
 def calamari_eval_cli(files, num_threads, n_confusions, skip_empty_gt):
     outfile, outfile_name = tempfile.mkstemp()
