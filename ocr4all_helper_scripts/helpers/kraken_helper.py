@@ -29,6 +29,10 @@ class KrakenHelper:
         """
         for file in self.files:
             xml = Path(file.parent, f"{file.name.split('.')[0]}.xml")
+
+            if not xml.exists():
+                continue
+
             root = etree.parse(str(xml)).getroot()
 
             self.merge_duplicate_regions(root)
