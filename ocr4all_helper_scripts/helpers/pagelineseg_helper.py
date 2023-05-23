@@ -211,7 +211,7 @@ def segment(im: Image, scale: float = None, max_blackseps: int = 0, widen_blacks
             minheight_whiteseps: int = 10, filter_strength: float = 1.0,
             smear_strength: Tuple[float, float] = (1.0, 2.0), growth: Tuple[float, float] = (1.1, 1.1),
             orientation: int = 0, fail_save_iterations: int = 50, vscale: float = 1.0, hscale: float = 1.0,
-            minscale: float = 12.0, maxlines: int = 300, threshold: float = 0.2, usegauss: bool = False,
+            minscale: float = 5.0, maxlines: int = 300, threshold: float = 0.2, usegauss: bool = False,
             bounding_box: bool = False):
     """
     Segments a page into text lines.
@@ -298,7 +298,7 @@ def pagelineseg(xmlfile: str,
                 widen_blackseps: int = 10,
                 max_whiteseps: int = -1,
                 minheight_whiteseps: int = 10,
-                minscale: float = 12.0,
+                minscale: float = 5.0,
                 maxlines: int = 300,
                 smear_strength: Tuple[float, float] = (1.0, 2.0),
                 growth: Tuple[float, float] = (1.1, 1.1),

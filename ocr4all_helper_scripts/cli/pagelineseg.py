@@ -15,7 +15,7 @@ import click
 @click.option("--remove-images", is_flag=True, default=True,
               help="Remove ImageRegions from the image before processing TextRegions for TextLines. Can be used if "
                    "ImageRegions overlap with TextRegions.")
-@click.option("--minscale", type=float, default=12.0,
+@click.option("--minscale", type=float, default=5.0,
               help="Minimum scale permitted.")
 @click.option("--maxlines", type=int, default=300,
               help="Maximum number of lines permitted.")
