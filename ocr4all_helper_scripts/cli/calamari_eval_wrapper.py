@@ -17,7 +17,7 @@ def calamari_eval_cli(files, num_threads, n_confusions, skip_empty_gt):
     # Necessary because calamari-eval progress bars destroy OCR4all console output
     with contextlib.redirect_stdout(outfile):
         calamari_eval_helper.prepare_filesystem()
-        calamari_eval_helper.save_eval_files(files)
+        calamari_eval_helper.save_eval_files(files, skip_empty_gt)
         calamari_eval_helper.run_eval(n_confusions, skip_empty_gt, num_threads)
         calamari_eval_helper.cleanup()
     with Path(outfile_name).open("r") as fp:
