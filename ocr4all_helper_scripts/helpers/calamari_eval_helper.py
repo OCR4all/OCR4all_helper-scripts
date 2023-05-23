@@ -16,7 +16,7 @@ def prepare_filesystem():
         EVAL_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def get_text_content(file: str) -> Tuple[List[str], List[str]]:
+def get_text_content(file: str, skip_empty_gt: bool) -> Tuple[List[str], List[str]]:
     gt, pred = [], []
 
     root = etree.parse(file).getroot()
@@ -28,6 +28,7 @@ def get_text_content(file: str) -> Tuple[List[str], List[str]]:
         if len(gt_equiv) == 1:
             gt.append("".join(gt_equiv[0].find("./{*}Unicode").itertext()))
         else:
+            if skip_empty_gt: continue
             gt.append("")
 
         if len(pred_equiv) == 1:
@@ -38,9 +39,9 @@ def get_text_content(file: str) -> Tuple[List[str], List[str]]:
     return gt, pred
 
 
-def save_eval_files(files: List[str]):
+def save_eval_files(files: List[str], skip_empty_gt: bool):
     for file in files:
-        gt, pred = get_text_content(file)
+        gt, pred = get_text_content(file, skip_empty_gt)
 
         with Path(EVAL_DIR, f"{Path(file).name.split('.')[0]}.gt.txt").open("w") as gtfile:
             gtfile.write("\n".join(gt))
